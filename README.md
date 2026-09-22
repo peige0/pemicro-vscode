@@ -7,7 +7,7 @@ VS Code extension for **NXP MPC5777M / e200 VLE** using PEmicro tools.
 - HSM-safe **Attach Only (No Reset)** using `[CWDBG] Connect=1`
 - GDB Download / Download + Reset Debug
 - Integrated Flash & Debug panel
-- PEmicro CPROGPPCNEXUS operations: EM, EN, BM, ER, BR, PM, VM, Reset + Run
+- Direct PEmicro POWER GDB Server flash operations: erase, program+verify, verify-only, erase+program+verify
 - USB Multilink hardware detection
 - Configurable ELF, image, PCP algorithm, GDB and PEmicro server paths
 
@@ -39,7 +39,7 @@ Keep **CDT GDB Debug Adapter** (`eclipse-cdt.cdt-gdb-vscode`) installed.
 - `MPC5777M: Attach Only (No Reset)`
 - `MPC5777M: GDB Download Only`
 - `MPC5777M: GDB Download + Reset Debug`
-- Flash erase/program/verify/range operations
+- GDB Server flash erase/program/verify operations
 - `MPC5777M: Detect PEmicro Hardware`
 
 ## Defaults
@@ -56,4 +56,4 @@ Keep **CDT GDB Debug Adapter** (`eclipse-cdt.cdt-gdb-vscode`) installed.
 
 For a running HSM-enabled ECU, use **Attach Only (No Reset)**. Programming operations intentionally take ownership of the Multilink and may reset or erase the target.
 
-See [docs/PROGRAMMING.md](docs/PROGRAMMING.md) for the CPROG backend.
+Flash operations use `pegdbserver_power_console.exe` directly with `-flashobjectfile`, `-programmingtype`, and `-quitafterprogramming`. PEmicro POWER GDB Server does not expose standalone range erase/blank-check operations; use PROGPPNEXUS when those are required.
