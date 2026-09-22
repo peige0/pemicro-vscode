@@ -1,8 +1,8 @@
 {
   "name": "mpc5777m-pemicro-debug",
   "displayName": "MPC5777M PEmicro Debug & Flash",
-  "description": "MPC5777M debugging and PEmicro CPROG flash operations for VS Code.",
-  "version": "1.2.0",
+  "description": "MPC5777M debugging and PEmicro GDB Server flash operations for VS Code.",
+  "version": "1.3.0",
   "publisher": "peige0",
   "license": "UNLICENSED",
   "engines": {
@@ -19,7 +19,6 @@
     "e200",
     "VLE",
     "GDB",
-    "CPROGPPCNEXUS",
     "flash"
   ],
   "main": "./extension.js",
@@ -53,12 +52,12 @@
       },
       {
         "command": "mpc5777m.flashFull",
-        "title": "MPC5777M: Flash - Erase + Blank + Program + Verify",
+        "title": "MPC5777M: Flash - Erase + Program + Verify (GDB Server)",
         "category": "MPC5777M"
       },
       {
         "command": "mpc5777m.eraseModule",
-        "title": "MPC5777M: Flash - Erase Module (EM)",
+        "title": "MPC5777M: Flash - Erase Entire Flash (GDB Server)",
         "category": "MPC5777M"
       },
       {
@@ -83,12 +82,12 @@
       },
       {
         "command": "mpc5777m.programModule",
-        "title": "MPC5777M: Flash - Program Module (PM)",
+        "title": "MPC5777M: Flash - Program + Verify (GDB Server)",
         "category": "MPC5777M"
       },
       {
         "command": "mpc5777m.verifyModule",
-        "title": "MPC5777M: Flash - Verify Module (VM)",
+        "title": "MPC5777M: Flash - Verify Only (GDB Server)",
         "category": "MPC5777M"
       },
       {
@@ -183,23 +182,6 @@
           "type": "string",
           "default": "",
           "description": "Optional path to pegdbserver_power_console.exe. Empty = bundled runtime."
-        },
-        "mpc5777mDebug.cprogPath": {
-          "type": "string",
-          "default": "",
-          "description": "Optional path to cprogppcnexus.exe."
-        },
-        "mpc5777mDebug.algorithmPath": {
-          "type": "string",
-          "default": "",
-          "description": "Optional PCP path. Empty = bundled MPC5777M CFlash PCP."
-        },
-        "mpc5777mDebug.cprogExtraArgs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": []
         }
       }
     }
