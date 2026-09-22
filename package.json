@@ -1,0 +1,207 @@
+{
+  "name": "mpc5777m-pemicro-debug",
+  "displayName": "MPC5777M PEmicro Debug & Flash",
+  "description": "MPC5777M debugging and PEmicro CPROG flash operations for VS Code.",
+  "version": "1.2.0",
+  "publisher": "peige0",
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Other"
+  ],
+  "keywords": [
+    "MPC5777M",
+    "PEmicro",
+    "PowerPC",
+    "e200",
+    "VLE",
+    "GDB",
+    "CPROGPPCNEXUS",
+    "flash"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "extensionDependencies": [
+    "eclipse-cdt.cdt-gdb-vscode"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "mpc5777m.openPanel",
+        "title": "MPC5777M: Open Flash & Debug Panel",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.attach",
+        "title": "MPC5777M: Attach Only (No Reset)",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.download",
+        "title": "MPC5777M: GDB Download Only",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.resetDebug",
+        "title": "MPC5777M: GDB Download + Reset Debug",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.flashFull",
+        "title": "MPC5777M: Flash - Erase + Blank + Program + Verify",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.eraseModule",
+        "title": "MPC5777M: Flash - Erase Module (EM)",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.eraseIfNotBlank",
+        "title": "MPC5777M: Flash - Erase If Not Blank (EN)",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.blankCheckModule",
+        "title": "MPC5777M: Flash - Blank Check Module (BM)",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.eraseRange",
+        "title": "MPC5777M: Flash - Erase Range (ER)",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.blankCheckRange",
+        "title": "MPC5777M: Flash - Blank Check Range (BR)",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.programModule",
+        "title": "MPC5777M: Flash - Program Module (PM)",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.verifyModule",
+        "title": "MPC5777M: Flash - Verify Module (VM)",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.resetRun",
+        "title": "MPC5777M: Flash - Reset + Run (RE/GO)",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.customCprog",
+        "title": "MPC5777M: Flash - Run Custom CPROG Sequence",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.stopServer",
+        "title": "MPC5777M: Stop PEmicro GDB Server",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.showVersions",
+        "title": "MPC5777M: Show Tool Versions",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.detectHardware",
+        "title": "MPC5777M: Detect PEmicro Hardware",
+        "category": "MPC5777M"
+      }
+    ],
+    "configuration": {
+      "title": "MPC5777M PEmicro Debug & Flash",
+      "properties": {
+        "mpc5777mDebug.elfPath": {
+          "type": "string",
+          "default": "Bin/Project.elf"
+        },
+        "mpc5777mDebug.programImagePath": {
+          "type": "string",
+          "default": "Bin/Project.elf"
+        },
+        "mpc5777mDebug.device": {
+          "type": "string",
+          "default": "MPC5777M"
+        },
+        "mpc5777mDebug.interface": {
+          "type": "string",
+          "default": "USBMULTILINK"
+        },
+        "mpc5777mDebug.port": {
+          "type": "string",
+          "default": "USB1"
+        },
+        "mpc5777mDebug.speed": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 1
+        },
+        "mpc5777mDebug.serverPort": {
+          "type": "number",
+          "default": 7224,
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "mpc5777mDebug.gdbMiPort": {
+          "type": "number",
+          "default": 6224,
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "mpc5777mDebug.core": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0
+        },
+        "mpc5777mDebug.verbose": {
+          "type": "boolean",
+          "default": false
+        },
+        "mpc5777mDebug.updateThreadInfo": {
+          "type": "string",
+          "enum": [
+            "missing",
+            "when-requested"
+          ],
+          "default": "missing"
+        },
+        "mpc5777mDebug.gdbPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to powerpc-eabivle-gdb.exe. Empty = bundled runtime."
+        },
+        "mpc5777mDebug.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to pegdbserver_power_console.exe. Empty = bundled runtime."
+        },
+        "mpc5777mDebug.cprogPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to cprogppcnexus.exe."
+        },
+        "mpc5777mDebug.algorithmPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional PCP path. Empty = bundled MPC5777M CFlash PCP."
+        },
+        "mpc5777mDebug.cprogExtraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      }
+    }
+  }
+}
