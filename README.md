@@ -57,3 +57,18 @@ Keep **CDT GDB Debug Adapter** (`eclipse-cdt.cdt-gdb-vscode`) installed.
 For a running HSM-enabled ECU, use **Attach Only (No Reset)**. Programming operations intentionally take ownership of the Multilink and may reset or erase the target.
 
 Flash operations use `pegdbserver_power_console.exe` directly with `-flashobjectfile`, `-programmingtype`, and `-quitafterprogramming`. PEmicro POWER GDB Server does not expose standalone range erase/blank-check operations; use PROGPPNEXUS when those are required.
+
+## GitHub Release
+
+The GitHub Release publishes a **source/lite VSIX**. It does not redistribute NXP or PEmicro proprietary binaries.
+
+After installing the VSIX, configure these settings when the runtimes are not bundled locally:
+
+```json
+{
+  "mpc5777mDebug.gdbPath": "C:\\NXP\\S32DS_Power_v2.1\\S32DS\\build_tools\\powerpc-eabivle-4_9\\bin\\powerpc-eabivle-gdb.exe",
+  "mpc5777mDebug.serverPath": "C:\\NXP\\S32DS_Power_v2.1\\eclipse\\plugins\\com.pemicro.debug.gdbjtag.ppc_2.0.5.202210261806\\win32\\pegdbserver_power_console.exe"
+}
+```
+
+For a private/offline bundle that includes the local runtime files, run `scripts/prepare-runtime.ps1` before packaging locally.
