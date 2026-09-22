@@ -1,0 +1,6 @@
+*.vsix
+node_modules/
+resources/gdb/
+resources/pemicro/
+.vscode/mpc5777m-cprog-*.cfg
+.vscode/mpc5777m-cprog-*.log
