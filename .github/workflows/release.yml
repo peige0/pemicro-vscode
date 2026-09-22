@@ -1,0 +1,53 @@
+name: Publish VSIX Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Read version
+        id: pkg
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          NAME=$(node -p "require('./package.json').name")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "asset=$NAME-$VERSION.vsix" >> "$GITHUB_OUTPUT"
+
+      - name: Package VSIX
+        shell: bash
+        run: |
+          npx --yes @vscode/vsce package --out "${{ steps.pkg.outputs.asset }}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ steps.pkg.outputs.version }}
+          ASSET: ${{ steps.pkg.outputs.asset }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber
+          else
+            gh release create "$TAG" "$ASSET"               --target "$GITHUB_SHA"               --title "MPC5777M PEmicro Debug & Flash $TAG"               --notes "VS Code extension release $TAG.
+
+This public release does not redistribute NXP/PEmicro proprietary runtime binaries. Configure mpc5777mDebug.gdbPath and mpc5777mDebug.serverPath, or build a private/offline bundle with scripts/prepare-runtime.ps1."
+          fi
