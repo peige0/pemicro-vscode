@@ -2,7 +2,7 @@
   "name": "mpc5777m-pemicro-debug",
   "displayName": "MPC5777M PEmicro Debug & Flash",
   "description": "MPC5777M debugging and flash programming for VS Code with bundled PowerPC VLE GDB and PEmicro Power GDB Server.",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "publisher": "peige0",
   "license": "UNLICENSED",
   "engines": {
@@ -185,6 +185,11 @@
           "type": "string",
           "default": "",
           "description": "Optional PEmicro server path. Empty = full bundled PEmicro 8.98 runtime, extracted automatically on first use."
+        },
+        "mpc5777mDebug.pemicroConfigPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional original S32DS/PEmicro config.ini. When set, debug server launch uses this file instead of the bundled minimal config."
         }
       }
     }
