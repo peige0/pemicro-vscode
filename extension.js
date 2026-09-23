@@ -8,21 +8,10 @@ let pemicroRuntimeRoot;
 function cfg(){return vscode.workspace.getConfiguration('mpc5777mDebug');}
 function ws(){const e=vscode.window.activeTextEditor;if(e){const f=vscode.workspace.getWorkspaceFolder(e.document.uri);if(f)return f;}return vscode.workspace.workspaceFolders&&vscode.workspace.workspaceFolders[0];}
 function rp(f,p){return path.isAbsolute(p)?p:path.join(f.uri.fsPath,p);}
-function autoGdb(context){
-  const configured=cfg().get('gdbPath','').trim();
-  if(configured)return configured;
-  const candidates=[
-    'D:\\Program\\NXP\\s32dspower\\S32DS\\build_tools\\powerpc-eabivle-4_9\\bin\\powerpc-eabivle-gdb.exe',
-    'C:\\NXP\\S32DS_Power_v2.1\\S32DS\\build_tools\\powerpc-eabivle-4_9\\bin\\powerpc-eabivle-gdb.exe',
-    'C:\\NXP\\S32DS_Power_v2.1\\build_tools\\powerpc-eabivle-4_9\\bin\\powerpc-eabivle-gdb.exe'
-  ];
-  for(const p of candidates)if(fs.existsSync(p))return p;
-  return path.join(context.extensionPath,'resources','gdb','bin','powerpc-eabivle-gdb.exe');
-}
 function rt(context){
   const pe=pemicroRuntimeRoot||path.join(context.extensionPath,'resources','pemicro','win32');
   return{
-    gdb:autoGdb(context),
+    gdb:cfg().get('gdbPath','').trim()||path.join(context.extensionPath,'resources','gdb','bin','powerpc-eabivle-gdb.exe'),
     server:cfg().get('serverPath','').trim()||path.join(pe,'pegdbserver_power_console.exe'),
     peRoot:pe,
     attach:path.join(context.extensionPath,'resources','config','pemicro_attach.ini'),
