@@ -56,22 +56,99 @@ async function flashGuard(fn){const x=await vscode.window.showWarningMessage('Th
 async function range(){const a=await vscode.window.showInputBox({prompt:'Start address (hex)',value:'00400000'});if(!a)return;const b=await vscode.window.showInputBox({prompt:'End address (hex)',value:'005FFFFF'});if(!b)return;return[hx(a),hx(b)];}
 async function versions(context){const p=rt(context);output.clear();try{output.appendLine('=== GDB ===\n'+await execText(p.gdb,['--version'],path.dirname(p.gdb)));}catch(e){output.appendLine('GDB ERROR: '+(e.output||e.message));}try{output.appendLine('\n=== PEmicro ===\n'+await execText(p.server,['-h'],path.dirname(p.server)));}catch(e){output.appendLine('PEmicro ERROR: '+(e.output||e.message));}output.show(true);}
 async function detect(context){const p=rt(context);need(p.server,'PEmicro GDB Server');await killServer();output.clear();output.appendLine(await execText(p.server,['-showhardware'],path.dirname(p.server)));output.show(true);}
-function html(){return [
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
+function html(){
+  const c=cfg();
+  return [
 '<!doctype html><html><head><meta charset="utf-8"><style>',
 'body{font-family:var(--vscode-font-family);padding:16px;color:var(--vscode-foreground)}',
 '.card{border:1px solid var(--vscode-panel-border);padding:12px;margin:10px 0;border-radius:6px}',
-'button{margin:4px;padding:7px 10px;background:var(--vscode-button-background);color:var(--vscode-button-foreground);border:0}',
-'input{padding:6px;margin:4px;width:180px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border)}',
-'.status{padding:8px;background:var(--vscode-textBlockQuote-background)}</style></head><body>',
+'.grid{display:grid;grid-template-columns:145px minmax(260px,1fr) auto;gap:7px;align-items:center}',
+'.mini{display:grid;grid-template-columns:repeat(6,minmax(100px,1fr));gap:8px;margin-top:10px}',
+'label{opacity:.9}button{margin:4px;padding:7px 10px;background:var(--vscode-button-background);color:var(--vscode-button-foreground);border:0;cursor:pointer}',
+'input{box-sizing:border-box;width:100%;padding:6px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border)}',
+'.status{padding:8px;background:var(--vscode-textBlockQuote-background)}.muted{opacity:.7;font-size:12px;margin-top:6px}</style></head><body>',
 '<h2>MPC5777M Flash & Debug</h2>',
-'<div class="card"><b>Debug</b><br><button onclick="send(&quot;attach&quot;)">Attach Only (No Reset)</button><button onclick="send(&quot;download&quot;)">GDB Download</button><button onclick="send(&quot;resetdebug&quot;)">Download + Reset Debug</button><button onclick="send(&quot;stop&quot;)">Stop Server</button><button onclick="send(&quot;detect&quot;)">Detect Multilink</button><button onclick="send(&quot;versions&quot;)">Tool Versions</button></div>',
-'<div class="card"><b>Erase / Blank</b><br><button onclick="send(&quot;em&quot;)">Erase Entire Flash</button><button disabled title="Requires PROGPPNEXUS">Erase If Not Blank (PROG only)</button><button disabled title="Requires PROGPPNEXUS">Blank Check (PROG only)</button></div>',
+'<div class="card"><b>Configuration</b><div class="grid">',
+'<label>ELF</label><input id="elf" value="'+esc(c.get('elfPath','Bin/Project.elf'))+'"><button onclick="browse(&quot;elf&quot;)">Browse</button>',
+'<label>Program image</label><input id="image" value="'+esc(c.get('programImagePath','Bin/Project.elf'))+'"><button onclick="browse(&quot;image&quot;)">Browse</button>',
+'<label>GDB path</label><input id="gdb" value="'+esc(c.get('gdbPath',''))+'" placeholder="Empty = bundled GDB"><button onclick="browse(&quot;gdb&quot;)">Browse</button>',
+'<label>PEmicro server</label><input id="server" value="'+esc(c.get('serverPath',''))+'" placeholder="Empty = bundled pegdbserver_power_console.exe"><button onclick="browse(&quot;server&quot;)">Browse</button>',
+'</div><div class="mini">',
+'<div><label>Device</label><input id="device" value="'+esc(c.get('device','MPC5777M'))+'"></div>',
+'<div><label>Interface</label><input id="iface" value="'+esc(c.get('interface','USBMULTILINK'))+'"></div>',
+'<div><label>Port</label><input id="port" value="'+esc(c.get('port','USB1'))+'"></div>',
+'<div><label>Speed kHz</label><input id="speed" value="'+esc(c.get('speed',5000))+'"></div>',
+'<div><label>Core</label><input id="core" value="'+esc(c.get('core',0))+'"></div>',
+'<div><label>GDB port</label><input id="gdbport" value="'+esc(c.get('serverPort',7224))+'"></div>',
+'</div><br><button onclick="save()">Save Configuration</button><button onclick="send(&quot;settings&quot;)">Open Settings</button><button onclick="send(&quot;versions&quot;)">Show Tool Versions</button><button onclick="send(&quot;detect&quot;)">Detect Multilink</button><div class="muted">Paths may be workspace-relative. Leave GDB/server blank to use bundled runtime.</div></div>',
+'<div class="card"><b>Debug</b><br><button onclick="send(&quot;attach&quot;)">Attach Only (No Reset)</button><button onclick="send(&quot;download&quot;)">GDB Download</button><button onclick="send(&quot;resetdebug&quot;)">Download + Reset Debug</button><button onclick="send(&quot;stop&quot;)">Stop Server</button></div>',
+'<div class="card"><b>Erase</b><br><button onclick="send(&quot;em&quot;)">Erase Entire Flash</button></div>',
 '<div class="card"><b>Program / Verify</b><br><button onclick="send(&quot;pm&quot;)">Program + Verify</button><button onclick="send(&quot;vm&quot;)">Verify Only</button><button onclick="send(&quot;full&quot;)">Erase + Program + Verify</button><button onclick="send(&quot;go&quot;)">Erase + Program + Verify + Run</button></div>',
 '<div class="status" id="status">Ready</div>',
-'<script>const vscode=acquireVsCodeApi();function send(c){vscode.postMessage({command:c});}window.addEventListener("message",e=>document.getElementById("status").textContent=e.data);</script>',
-'</body></html>'
-].join('');}
-async function openPanel(context){if(panel){panel.reveal();return;}panel=vscode.window.createWebviewPanel('mpc5777m','MPC5777M Flash & Debug',vscode.ViewColumn.One,{enableScripts:true});panel.webview.html=html();panel.onDidDispose(()=>panel=undefined);panel.webview.onDidReceiveMessage(async m=>{const st=s=>panel&&panel.webview.postMessage(s);try{st('Running '+m.command+'...');if(m.command==='attach'||m.command==='download'||m.command==='resetdebug')await debug(context,m.command);else if(m.command==='stop')await killServer();else if(m.command==='detect')await detect(context);else if(m.command==='versions')await versions(context);else if(m.command==='em')await flashGuard(()=>runFlashServer(context,3));else if(m.command==='pm')await flashGuard(()=>runFlashServer(context,1));else if(m.command==='vm')await flashGuard(()=>runFlashServer(context,2));else if(m.command==='full')await flashGuard(()=>runFlashServer(context,0,{runAfter:false}));else if(m.command==='go')await flashGuard(()=>runFlashServer(context,0,{runAfter:true}));else if(m.command==='en')await unsupported('Erase If Not Blank');else if(m.command==='bm')await unsupported('Blank Check Module');else if(m.command==='er')await unsupported('Erase Range');else if(m.command==='br')await unsupported('Blank Check Range');st('Completed: '+m.command);}catch(e){output.appendLine('[ERROR] '+(e.stack||e));output.show(true);st('ERROR: '+(e.message||e));vscode.window.showErrorMessage(String(e.message||e));}});}
+'<script>',
+'const vscode=acquireVsCodeApi();',
+'const q=id=>document.getElementById(id);',
+'function values(){return {elf:q("elf").value,image:q("image").value,gdb:q("gdb").value,server:q("server").value,device:q("device").value,iface:q("iface").value,port:q("port").value,speed:q("speed").value,core:q("core").value,gdbport:q("gdbport").value};}',
+'function send(c){vscode.postMessage({command:c,...values()});}',
+'function save(){vscode.postMessage({command:"save",...values()});}',
+'function browse(kind){vscode.postMessage({command:"browse",kind});}',
+'window.addEventListener("message",e=>{const m=e.data;if(m.type==="status")q("status").textContent=m.value;if(m.type==="path")q(m.kind).value=m.value;});',
+'</script></body></html>'
+].join('');
+}
+async function savePanelConfig(m){
+  const c=cfg();
+  const target=vscode.ConfigurationTarget.Workspace;
+  const updates=[
+    ['elfPath',m.elf],['programImagePath',m.image],['gdbPath',m.gdb],['serverPath',m.server],
+    ['device',m.device],['interface',m.iface],['port',m.port],
+    ['speed',Number(m.speed)||5000],['core',Number(m.core)||0],['serverPort',Number(m.gdbport)||7224]
+  ];
+  for(const [k,v] of updates)await c.update(k,v,target);
+}
+async function openPanel(context){
+  const folder=ws();if(!folder){vscode.window.showErrorMessage('Open a workspace first.');return;}
+  if(panel){panel.reveal();panel.webview.html=html();return;}
+  panel=vscode.window.createWebviewPanel('mpc5777m','MPC5777M Flash & Debug',vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true});
+  panel.webview.html=html();
+  panel.onDidDispose(()=>panel=undefined);
+  panel.webview.onDidReceiveMessage(async m=>{
+    const st=s=>panel&&panel.webview.postMessage({type:'status',value:s});
+    try{
+      if(m.command==='browse'){
+        const filters=m.kind==='elf'?{'ELF':['elf'],'All files':['*']}:
+          m.kind==='image'?{'Program images':['elf','s19','srec','hex','mot'],'All files':['*']}:
+          {'Executable':['exe'],'All files':['*']};
+        const u=await vscode.window.showOpenDialog({canSelectMany:false,filters,defaultUri:folder.uri});
+        if(u&&u[0]){
+          let v=u[0].fsPath;
+          const rel=path.relative(folder.uri.fsPath,v);
+          if((m.kind==='elf'||m.kind==='image')&&rel&&!rel.startsWith('..')&&!path.isAbsolute(rel))v=rel;
+          panel&&panel.webview.postMessage({type:'path',kind:m.kind,value:v});
+        }
+        return;
+      }
+      if(m.command==='save'){await savePanelConfig(m);st('Configuration saved to workspace.');return;}
+      if(m.command==='settings'){await vscode.commands.executeCommand('workbench.action.openSettings','mpc5777mDebug');return;}
+      if(['attach','download','resetdebug','em','pm','vm','full','go'].includes(m.command))await savePanelConfig(m);
+      st('Running '+m.command+'...');
+      if(m.command==='attach'||m.command==='download'||m.command==='resetdebug')await debug(context,m.command);
+      else if(m.command==='stop')await killServer();
+      else if(m.command==='detect')await detect(context);
+      else if(m.command==='versions')await versions(context);
+      else if(m.command==='em')await flashGuard(()=>runFlashServer(context,3));
+      else if(m.command==='pm')await flashGuard(()=>runFlashServer(context,1));
+      else if(m.command==='vm')await flashGuard(()=>runFlashServer(context,2));
+      else if(m.command==='full')await flashGuard(()=>runFlashServer(context,0,{runAfter:false}));
+      else if(m.command==='go')await flashGuard(()=>runFlashServer(context,0,{runAfter:true}));
+      st('Completed: '+m.command);
+    }catch(e){
+      output.appendLine('[ERROR] '+(e.stack||e));output.show(true);
+      st('ERROR: '+(e.message||e));vscode.window.showErrorMessage(String(e.message||e));
+    }
+  });
+}
 function activate(context){output=vscode.window.createOutputChannel('MPC5777M PEmicro');context.subscriptions.push(output);statusItem=vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left,50);statusItem.text='$(debug-alt) MPC5777M';statusItem.command='mpc5777m.openPanel';statusItem.show();context.subscriptions.push(statusItem);const reg=(n,f)=>context.subscriptions.push(vscode.commands.registerCommand(n,async()=>{try{return await f();}catch(e){output.appendLine('[ERROR] '+(e.stack||e));output.show(true);vscode.window.showErrorMessage(String(e.message||e));}}));reg('mpc5777m.openPanel',()=>openPanel(context));reg('mpc5777m.attach',()=>debug(context,'attach'));reg('mpc5777m.download',()=>debug(context,'download'));reg('mpc5777m.resetDebug',()=>debug(context,'resetdebug'));reg('mpc5777m.eraseModule',()=>flashGuard(()=>runFlashServer(context,3)));reg('mpc5777m.eraseIfNotBlank',()=>unsupported('Erase If Not Blank'));reg('mpc5777m.blankCheckModule',()=>unsupported('Blank Check Module'));reg('mpc5777m.eraseRange',()=>unsupported('Erase Range'));reg('mpc5777m.blankCheckRange',()=>unsupported('Blank Check Range'));reg('mpc5777m.programModule',()=>flashGuard(()=>runFlashServer(context,1)));reg('mpc5777m.verifyModule',()=>flashGuard(()=>runFlashServer(context,2)));reg('mpc5777m.flashFull',()=>flashGuard(()=>runFlashServer(context,0,{runAfter:false})));reg('mpc5777m.resetRun',()=>flashGuard(()=>runFlashServer(context,0,{runAfter:true})));reg('mpc5777m.customCprog',()=>unsupported('Custom CPROG Sequence'));reg('mpc5777m.stopServer',()=>killServer());reg('mpc5777m.showVersions',()=>versions(context));reg('mpc5777m.detectHardware',()=>detect(context));}
 function deactivate(){}
 module.exports={activate,deactivate};
