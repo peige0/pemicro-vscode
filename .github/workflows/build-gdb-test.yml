@@ -1,0 +1,38 @@
+name: Test Build PowerPC VLE GDB
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-gdb-test.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install cross build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 make gcc g++ texinfo bison flex wget xz-utils
+
+      - name: Download GNU GDB 7.8.2 source
+        run: |
+          wget -q https://ftp.gnu.org/gnu/gdb/gdb-7.8.2.tar.xz
+          tar -xf gdb-7.8.2.tar.xz
+
+      - name: Configure Windows PowerPC VLE GDB
+        shell: bash
+        run: |
+          mkdir build
+          cd build
+          ../gdb-7.8.2/configure             --host=x86_64-w64-mingw32             --target=powerpc-eabivle             --disable-werror             --disable-nls             --without-python             --without-expat             --disable-tui             --disable-sim
+
+      - name: Build GDB
+        run: |
+          make -C build -j2 all-gdb
+
+      - name: Inspect
+        run: |
+          find build -iname '*gdb*.exe' -o -iname '*gdb*'
+          file build/gdb/gdb.exe || true
