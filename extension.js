@@ -47,6 +47,7 @@ async function debug(context,mode){const f=ws();if(!f)throw new Error('Open a wo
 function flashImage(f){return rp(f,cfg().get('programImagePath','Bin/Project.elf'));}
 async function runFlashServer(context,type,{runAfter=false}={}){
   const f=ws();if(!f)throw new Error('Open a workspace first.');
+  await ensurePemicroRuntime(context);
   const p=rt(context),c=cfg();need(p.server,'PEmicro GDB Server');
   const image=flashImage(f);
   if(type!==3)need(image,'Program image');
