@@ -48,9 +48,7 @@ async function startServer(context,mode){
   const p=rt(context),c=cfg();need(p.server,'PEmicro GDB Server');
   await killServer();
   const ini=p.externalConfig||(mode==='attach'?p.attach:(mode==='resetdebug'?p.reset:p.download));
-  const args=['-device='+c.get('device','MPC5777M'),'-startserver','-singlesession'];
-  if(mode==='attach')args.push('-attachonly');
-  args.push('-serverport='+c.get('serverPort',7224),'-gdbmiport='+c.get('gdbMiPort',6224),'-interface='+c.get('interface','USBMULTILINK'),'-speed='+c.get('speed',5000),'-port='+c.get('port','USB1'));
+  const args=['-device='+c.get('device','MPC5777M'),'-startserver','-singlesession','-serverport='+c.get('serverPort',7224),'-gdbmiport='+c.get('gdbMiPort',6224),'-interface='+c.get('interface','USBMULTILINK'),'-speed='+c.get('speed',5000),'-port='+c.get('port','USB1')];
   const core=Number(c.get('core',0))||0;
   if(core>0)args.push('-corenum='+core);
   args.push('-configfile='+ini);
@@ -86,8 +84,9 @@ async function debug(context,mode){
     target:{type:'remote',host:'127.0.0.1',port:String(cfg().get('serverPort',7224))},
     gdbAsync:true,
     gdbNonStop:false,
-    run:mode==='attach'?'preserve':'all',
-    updateThreadInfo:mode==='attach'?'missing':cfg().get('updateThreadInfo','when-requested'),
+    run:'all',
+    updateThreadInfo:'when-requested',
+    preConnectCommands:['set backtrace limit 1'],
     verbose:cfg().get('verbose',false)
   };
 
