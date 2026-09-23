@@ -99,6 +99,12 @@ jobs:
             exit 1
           fi
 
+      - name: Clean temporary build inputs
+        shell: bash
+        run: |
+          rm -rf gdb-seed pemicro-plugin
+          rm -f gdb-seed.vsix pemicro-power.jar
+
       - name: Install VSCE
         run: npm install --global @vscode/vsce
 
