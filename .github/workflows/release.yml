@@ -16,15 +16,13 @@ permissions:
   contents: write
 
 env:
-  NXP_TOOLCHAIN_URL: http://italydelight.it/downloads/powerpc-eabivle-4_9.zip
-  GDB_SHA256: 2fb128080e2fb917959955ce8e802a2741300b14106529aa308cdfb4901a236d
-  WINPTHREAD_SHA256: 32b745c0ba7ff57ccfa6bfaed576bed1a48590d79b80511c56b0e0829c38838f
+  GDB_VERSION: "7.8.2"
   PEMICRO_URL: https://www.pemicro.com/eclipse/updates/com.pemicro.debug.gdbjtag.ppc.updatesite/plugins/com.pemicro.debug.gdbjtag.ppc_2.0.5.202210261806.jar
   PEMICRO_SHA256: 1d7786f9bf2bc308a8a8c803450187107495e061d1c4d50437997a54abca2f06
 
 jobs:
   build-release:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,102 +34,112 @@ jobs:
 
       - name: Read package metadata
         id: pkg
-        shell: pwsh
+        shell: bash
         run: |
-          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
-          "version=$($pkg.version)" >> $env:GITHUB_OUTPUT
-          "asset=$($pkg.name)-$($pkg.version)-bundled.vsix" >> $env:GITHUB_OUTPUT
+          VERSION=$(node -p "require('./package.json').version")
+          NAME=$(node -p "require('./package.json').name")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "asset=$NAME-$VERSION-bundled.vsix" >> "$GITHUB_OUTPUT"
 
-      - name: Download NXP PowerPC VLE toolchain
-        shell: pwsh
+      - name: Install GDB cross-build dependencies
         run: |
-          & curl.exe -L --fail --retry 3 --connect-timeout 30 -o nxp-powerpc-toolchain.zip $env:NXP_TOOLCHAIN_URL
-          if ($LASTEXITCODE -ne 0) { throw "NXP toolchain download failed: $LASTEXITCODE" }
-          Expand-Archive nxp-powerpc-toolchain.zip -DestinationPath nxp-toolchain -Force
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 make gcc g++ texinfo bison flex wget xz-utils
 
-      - name: Bundle verified PowerPC VLE GDB
-        shell: pwsh
+      - name: Download GNU GDB source
         run: |
-          $gdb = Get-ChildItem nxp-toolchain -Recurse -File -Filter "powerpc-eabivle-gdb.exe" | Select-Object -First 1
-          $pthread = Get-ChildItem nxp-toolchain -Recurse -File -Filter "libwinpthread-1.dll" | Select-Object -First 1
-          if (-not $gdb) { throw "powerpc-eabivle-gdb.exe not found in downloaded toolchain" }
-          if (-not $pthread) { throw "libwinpthread-1.dll not found in downloaded toolchain" }
+          wget -q "https://ftp.gnu.org/gnu/gdb/gdb-$GDB_VERSION.tar.xz"
+          tar -xf "gdb-$GDB_VERSION.tar.xz"
 
-          $gdbHash = (Get-FileHash $gdb.FullName -Algorithm SHA256).Hash.ToLower()
-          $pthreadHash = (Get-FileHash $pthread.FullName -Algorithm SHA256).Hash.ToLower()
-          if ($gdbHash -ne $env:GDB_SHA256) { throw "GDB SHA256 mismatch: $gdbHash" }
-          if ($pthreadHash -ne $env:WINPTHREAD_SHA256) { throw "libwinpthread SHA256 mismatch: $pthreadHash" }
-
-          $dst = Join-Path $PWD "resources\gdb\bin"
-          New-Item -ItemType Directory -Force $dst | Out-Null
-          Copy-Item $gdb.FullName (Join-Path $dst "powerpc-eabivle-gdb.exe") -Force
-          Copy-Item $pthread.FullName (Join-Path $dst "libwinpthread-1.dll") -Force
-
-          & (Join-Path $dst "powerpc-eabivle-gdb.exe") --version | Select-Object -First 3
-
-      - name: Download pinned PEmicro Power GDB Server plugin
-        shell: pwsh
+      - name: Build Windows PowerPC VLE GDB
+        shell: bash
         run: |
-          & curl.exe -L --fail --retry 3 --connect-timeout 30 -o pemicro-power.jar $env:PEMICRO_URL
-          if ($LASTEXITCODE -ne 0) { throw "PEmicro plugin download failed: $LASTEXITCODE" }
-          $h=(Get-FileHash pemicro-power.jar -Algorithm SHA256).Hash.ToLower()
-          if ($h -ne $env:PEMICRO_SHA256) { throw "PEmicro plugin SHA256 mismatch: $h" }
-          Expand-Archive pemicro-power.jar -DestinationPath pemicro-plugin -Force
+          mkdir gdb-build
+          cd gdb-build
+          "../gdb-$GDB_VERSION/configure"             --host=x86_64-w64-mingw32             --target=powerpc-eabivle             --disable-werror             --disable-nls             --without-python             --without-expat             --disable-tui             --disable-sim
+          make -j2 all-gdb
+          x86_64-w64-mingw32-strip --strip-unneeded gdb/gdb.exe
+          file gdb/gdb.exe
+          x86_64-w64-mingw32-objdump -p gdb/gdb.exe | grep "DLL Name" || true
 
-      - name: Bundle PEmicro 8.98 runtime
-        shell: pwsh
+      - name: Bundle GDB runtime
+        shell: bash
         run: |
-          $src = Join-Path $PWD "pemicro-plugin\win32"
-          $dst = Join-Path $PWD "resources\pemicro\win32"
-          if (-not (Test-Path (Join-Path $src "pegdbserver_power_console.exe"))) {
-            throw "PEmicro Power GDB Server executable not found"
-          }
-          New-Item -ItemType Directory -Force $dst | Out-Null
-          Copy-Item "$src\*" $dst -Recurse -Force
+          mkdir -p resources/gdb/bin
+          cp gdb-build/gdb/gdb.exe resources/gdb/bin/powerpc-eabivle-gdb.exe
 
-          $ver = & (Join-Path $dst "pegdbserver_power_console.exe") -h 2>&1 | Out-String
-          Write-Host $ver
-          if ($ver -notmatch "Version 8\.98\.00\.00") {
-            throw "Unexpected PEmicro GDB Server version"
-          }
+          PTHREAD=$(find /usr -type f -name libwinpthread-1.dll 2>/dev/null | head -n 1 || true)
+          if [ -n "$PTHREAD" ]; then
+            cp "$PTHREAD" resources/gdb/bin/libwinpthread-1.dll
+          fi
 
-          $pcp = Join-Path $dst "gdi\P&E\nxp_mpc5777m_1x32x1984k_cflash.pcp"
-          $mac = Join-Path $dst "gdi\P&E\s32e200_mpc5777m.mac"
-          if (-not (Test-Path $pcp)) { throw "MPC5777M CFlash PCP missing" }
-          if (-not (Test-Path $mac)) { throw "MPC5777M reset macro missing" }
+          test -s resources/gdb/bin/powerpc-eabivle-gdb.exe
+          GDB_SIZE=$(stat -c%s resources/gdb/bin/powerpc-eabivle-gdb.exe)
+          echo "Bundled GDB size: $GDB_SIZE"
+          if [ "$GDB_SIZE" -lt 3000000 ]; then
+            echo "GDB unexpectedly small"
+            exit 1
+          fi
+
+      - name: Download pinned PEmicro Power GDB Server 8.98
+        shell: bash
+        run: |
+          curl -L --fail --retry 3 --connect-timeout 30 -o pemicro-power.jar "$PEMICRO_URL"
+          ACTUAL=$(sha256sum pemicro-power.jar | awk '{print $1}')
+          if [ "$ACTUAL" != "$PEMICRO_SHA256" ]; then
+            echo "PEmicro SHA256 mismatch: $ACTUAL"
+            exit 1
+          fi
+          mkdir pemicro-plugin
+          unzip -q pemicro-power.jar -d pemicro-plugin
+
+      - name: Bundle PEmicro runtime
+        shell: bash
+        run: |
+          test -f pemicro-plugin/win32/pegdbserver_power_console.exe
+          mkdir -p resources/pemicro/win32
+          cp -a pemicro-plugin/win32/. resources/pemicro/win32/
+
+          test -f "resources/pemicro/win32/gdi/unit_ngs_ppcnexus_internal.dll"
+          test -f "resources/pemicro/win32/gdi/P&E/nxp_mpc5777m_1x32x1984k_cflash.pcp"
+          test -f "resources/pemicro/win32/gdi/P&E/s32e200_mpc5777m.mac"
 
       - name: Install VSCE
         run: npm install --global @vscode/vsce
 
       - name: Package bundled VSIX
-        shell: pwsh
         run: vsce package --out "${{ steps.pkg.outputs.asset }}"
 
       - name: Verify bundled VSIX
-        shell: pwsh
+        shell: bash
         run: |
-          $asset = "${{ steps.pkg.outputs.asset }}"
-          $size = (Get-Item $asset).Length
-          Write-Host "VSIX size: $size bytes"
-          if ($size -lt 20000000) { throw "Bundled VSIX is unexpectedly small: $size bytes" }
+          ASSET="${{ steps.pkg.outputs.asset }}"
+          SIZE=$(stat -c%s "$ASSET")
+          echo "VSIX size: $SIZE bytes"
+          if [ "$SIZE" -lt 20000000 ]; then
+            echo "Bundled VSIX is unexpectedly small: $SIZE"
+            exit 1
+          fi
 
-          Copy-Item $asset "$asset.zip" -Force
-          Expand-Archive "$asset.zip" -DestinationPath vsix-check -Force
+          rm -rf vsix-check
+          mkdir vsix-check
+          unzip -q "$ASSET" -d vsix-check
 
-          $required = @(
-            "extension\resources\gdb\bin\powerpc-eabivle-gdb.exe",
-            "extension\resources\gdb\bin\libwinpthread-1.dll",
-            "extension\resources\pemicro\win32\pegdbserver_power_console.exe",
-            "extension\resources\pemicro\win32\gdi\unit_ngs_ppcnexus_internal.dll",
-            "extension\resources\pemicro\win32\gdi\P&E\nxp_mpc5777m_1x32x1984k_cflash.pcp",
-            "extension\resources\pemicro\win32\gdi\P&E\s32e200_mpc5777m.mac",
-            "extension\resources\config\pemicro_attach.ini"
+          required=(
+            "extension/resources/gdb/bin/powerpc-eabivle-gdb.exe"
+            "extension/resources/pemicro/win32/pegdbserver_power_console.exe"
+            "extension/resources/pemicro/win32/gdi/unit_ngs_ppcnexus_internal.dll"
+            "extension/resources/pemicro/win32/gdi/P&E/nxp_mpc5777m_1x32x1984k_cflash.pcp"
+            "extension/resources/pemicro/win32/gdi/P&E/s32e200_mpc5777m.mac"
+            "extension/resources/config/pemicro_attach.ini"
           )
-          foreach ($r in $required) {
-            $p = Join-Path (Join-Path $PWD "vsix-check") $r
-            if (-not (Test-Path $p)) { throw "Missing from VSIX: $r" }
-            Write-Host "OK: $r"
-          }
+          for f in "${required[@]}"; do
+            if [ ! -f "vsix-check/$f" ]; then
+              echo "Missing from VSIX: $f"
+              exit 1
+            fi
+            echo "OK: $f"
+          done
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -144,10 +152,10 @@ jobs:
           body: |
             Full bundled VS Code extension v${{ steps.pkg.outputs.version }}.
 
-            Included runtime:
-            - NXP/Freescale PowerPC VLE GDB 7.8.2
+            Included:
+            - reproducibly built GNU GDB 7.8.2, target powerpc-eabivle, Windows x64
             - PEmicro Power GDB Server 8.98.00.00
             - PEmicro GDI runtime
             - MPC5777M flash algorithms and reset macro
 
-            The PEmicro plugin is fetched from PEmicro's official Eclipse update site at build time and pinned by SHA-256.
+            GDB is built from GNU source during CI. The PEmicro plugin is fetched from the official PEmicro Eclipse update site and pinned by SHA-256.
