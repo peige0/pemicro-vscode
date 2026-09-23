@@ -166,7 +166,7 @@
         },
         "mpc5777mDebug.verbose": {
           "type": "boolean",
-          "default": false
+          "default": true
         },
         "mpc5777mDebug.updateThreadInfo": {
           "type": "string",
