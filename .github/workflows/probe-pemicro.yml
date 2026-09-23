@@ -1,0 +1,32 @@
+name: Probe PEmicro Update Site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/probe-pemicro.yml"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    steps:
+      - name: Probe update metadata
+        shell: pwsh
+        run: |
+          $urls = @(
+            "https://www.pemicro.com/eclipse/updates/compositeArtifacts.xml",
+            "https://www.pemicro.com/eclipse/updates/compositeContent.xml",
+            "https://www.pemicro.com/eclipse/updates/artifacts.xml",
+            "https://www.pemicro.com/eclipse/updates/content.xml",
+            "https://www.pemicro.com/eclipse/updates/"
+          )
+          foreach ($u in $urls) {
+            Write-Host "===== $u ====="
+            try {
+              & curl.exe -L --fail --max-time 30 $u
+            } catch {
+              Write-Host $_
+            }
+            Write-Host ""
+          }
