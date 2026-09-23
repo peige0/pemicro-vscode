@@ -137,12 +137,30 @@ async function debug(context,mode){
     throw new Error('Could not start CDT GDB session. Check the CDT configuration printed above.');
 }
 function flashImage(f){return rp(f,cfg().get('programImagePath','Bin/Project.elf'));}
-async function runFlashServer(context,type,{runAfter=false}={}){
+async function resolvePcp(context){
+  const configured=cfg().get('pcpPath','').trim();
+  if(configured){need(configured,'PCP algorithm');return configured;}
+
+  const serverConfigured=cfg().get('serverPath','').trim();
+  if(serverConfigured){
+    const beside=path.join(path.dirname(serverConfigured),'gdi','P&E','nxp_mpc5777m_1x32x1984k_cflash.pcp');
+    if(fs.existsSync(beside))return beside;
+  }
+
+  // For bundled runtime, make sure it is extracted before resolving the PCP.
+  const savedServer=cfg().get('serverPath','').trim();
+  if(!savedServer)await ensurePemicroRuntime(context);
+  const p=rt(context);
+  need(p.algo,'MPC5777M PCP algorithm');
+  return p.algo;
+}
+async function runFlashServer(context,type,{runAfter=false,usePcp=false}={}){
   const f=ws();if(!f)throw new Error('Open a workspace first.');
   await ensurePemicroRuntime(context);
   const p=rt(context),c=cfg();need(p.server,'PEmicro GDB Server');
   const image=flashImage(f);
   if(type!==3)need(image,'Program image');
+  const pcp=usePcp?await resolvePcp(context):'';
   await killServer();
   const args=[
     '-device='+c.get('device','MPC5777M'),
@@ -152,12 +170,16 @@ async function runFlashServer(context,type,{runAfter=false}={}){
     '-interface='+c.get('interface','USBMULTILINK'),
     '-speed='+c.get('speed',5000),
     '-port='+c.get('port','USB1'),
-    '-configfile='+p.download,
+    '-configfile='+(p.externalConfig||p.download),
     '-programmingtype='+type,
-    type===3?'-flashobjectfile=':'-flashobjectfile='+image,
     '-quitafterprogramming',
     '-showflashstatus'
   ];
+  if(type!==3)args.push('-flashobjectfile='+image);
+  if(usePcp){
+    args.push('-alternativealgorithmpath='+pcp);
+    args.push('-currentalgorithmindex=0');
+  }
   if(runAfter)args.push('-runafterprogramming');
   output.clear();
   output.appendLine('[FLASH SERVER] '+p.server+' '+args.join(' '));
@@ -197,6 +219,7 @@ function html(){
 '<label>GDB path</label><input id="gdb" value="'+esc(c.get('gdbPath',''))+'" placeholder="Empty = bundled GDB"><button onclick="browse(&quot;gdb&quot;)">Browse</button>',
 '<label>PEmicro server</label><input id="server" value="'+esc(c.get('serverPath',''))+'" placeholder="Empty = bundled pegdbserver_power_console.exe"><button onclick="browse(&quot;server&quot;)">Browse</button>',
 '<label>PEmicro config</label><input id="peconfig" value="'+esc(c.get('pemicroConfigPath',''))+'" placeholder="Optional original S32DS config.ini"><button onclick="browse(&quot;peconfig&quot;)">Browse</button>',
+'<label>PCP algorithm</label><input id="pcp" value="'+esc(c.get('pcpPath',''))+'" placeholder="Empty = nxp_mpc5777m_1x32x1984k_cflash.pcp"><button onclick="browse(&quot;pcp&quot;)">Browse</button>',
 '</div><div class="mini">',
 '<div><label>Device</label><input id="device" value="'+esc(c.get('device','MPC5777M'))+'"></div>',
 '<div><label>Interface</label><input id="iface" value="'+esc(c.get('interface','USBMULTILINK'))+'"></div>',
@@ -206,13 +229,13 @@ function html(){
 '<div><label>GDB port</label><input id="gdbport" value="'+esc(c.get('serverPort',7224))+'"></div>',
 '</div><br><button onclick="save()">Save Configuration</button><button onclick="send(&quot;settings&quot;)">Open Settings</button><button onclick="send(&quot;versions&quot;)">Show Tool Versions</button><button onclick="send(&quot;detect&quot;)">Detect Multilink</button><div class="muted">Paths may be workspace-relative. Leave GDB/server blank to use bundled runtime.</div></div>',
 '<div class="card"><b>Debug</b><br><button onclick="send(&quot;attach&quot;)">Attach Only (No Reset)</button><button onclick="send(&quot;download&quot;)">GDB Download</button><button onclick="send(&quot;resetdebug&quot;)">Download + Reset Debug</button><button onclick="send(&quot;stop&quot;)">Stop Server</button></div>',
-'<div class="card"><b>Erase</b><br><button onclick="send(&quot;em&quot;)">Erase Entire Flash</button></div>',
+'<div class="card"><b>Erase</b><br><button onclick="send(&quot;em&quot;)">Erase Entire Flash</button><button onclick="send(&quot;pcperase&quot;)">Erase All (PCP)</button></div>',
 '<div class="card"><b>Program / Verify</b><br><button onclick="send(&quot;pm&quot;)">Program + Verify</button><button onclick="send(&quot;vm&quot;)">Verify Only</button><button onclick="send(&quot;full&quot;)">Erase + Program + Verify</button><button onclick="send(&quot;go&quot;)">Erase + Program + Verify + Run</button></div>',
 '<div class="status" id="status">Ready</div>',
 '<script>',
 'const vscode=acquireVsCodeApi();',
 'const q=id=>document.getElementById(id);',
-'function values(){return {elf:q("elf").value,image:q("image").value,gdb:q("gdb").value,server:q("server").value,peconfig:q("peconfig").value,device:q("device").value,iface:q("iface").value,port:q("port").value,speed:q("speed").value,core:q("core").value,gdbport:q("gdbport").value};}',
+'function values(){return {elf:q("elf").value,image:q("image").value,gdb:q("gdb").value,server:q("server").value,peconfig:q("peconfig").value,pcp:q("pcp").value,device:q("device").value,iface:q("iface").value,port:q("port").value,speed:q("speed").value,core:q("core").value,gdbport:q("gdbport").value};}',
 'function send(c){vscode.postMessage({command:c,...values()});}',
 'function save(){vscode.postMessage({command:"save",...values()});}',
 'function browse(kind){vscode.postMessage({command:"browse",kind});}',
@@ -224,7 +247,7 @@ async function savePanelConfig(m){
   const c=cfg();
   const target=vscode.ConfigurationTarget.Workspace;
   const updates=[
-    ['elfPath',m.elf],['programImagePath',m.image],['gdbPath',m.gdb],['serverPath',m.server],['pemicroConfigPath',m.peconfig],
+    ['elfPath',m.elf],['programImagePath',m.image],['gdbPath',m.gdb],['serverPath',m.server],['pemicroConfigPath',m.peconfig],['pcpPath',m.pcp],
     ['device',m.device],['interface',m.iface],['port',m.port],
     ['speed',Number(m.speed)||5000],['core',Number(m.core)||0],['serverPort',Number(m.gdbport)||7224]
   ];
@@ -243,6 +266,7 @@ async function openPanel(context){
         const filters=m.kind==='elf'?{'ELF':['elf'],'All files':['*']}:
           m.kind==='image'?{'Program images':['elf','s19','srec','hex','mot'],'All files':['*']}:
           m.kind==='peconfig'?{'Config':['ini'],'All files':['*']}:
+          m.kind==='pcp'?{'PEmicro PCP':['pcp'],'All files':['*']}:
           {'Executable':['exe'],'All files':['*']};
         const u=await vscode.window.showOpenDialog({canSelectMany:false,filters,defaultUri:folder.uri});
         if(u&&u[0]){
@@ -255,13 +279,14 @@ async function openPanel(context){
       }
       if(m.command==='save'){await savePanelConfig(m);st('Configuration saved to workspace.');return;}
       if(m.command==='settings'){await vscode.commands.executeCommand('workbench.action.openSettings','mpc5777mDebug');return;}
-      if(['attach','download','resetdebug','em','pm','vm','full','go'].includes(m.command))await savePanelConfig(m);
+      if(['attach','download','resetdebug','em','pcperase','pm','vm','full','go'].includes(m.command))await savePanelConfig(m);
       st('Running '+m.command+'...');
       if(m.command==='attach'||m.command==='download'||m.command==='resetdebug')await debug(context,m.command);
       else if(m.command==='stop')await killServer();
       else if(m.command==='detect')await detect(context);
       else if(m.command==='versions')await versions(context);
       else if(m.command==='em')await flashGuard(()=>runFlashServer(context,3));
+      else if(m.command==='pcperase')await flashGuard(()=>runFlashServer(context,3,{usePcp:true}));
       else if(m.command==='pm')await flashGuard(()=>runFlashServer(context,1));
       else if(m.command==='vm')await flashGuard(()=>runFlashServer(context,2));
       else if(m.command==='full')await flashGuard(()=>runFlashServer(context,0,{runAfter:false}));
@@ -273,6 +298,6 @@ async function openPanel(context){
     }
   });
 }
-function activate(context){pemicroRuntimeRoot=undefined;console.log('[MPC5777M] extension activate');output=vscode.window.createOutputChannel('MPC5777M PEmicro');context.subscriptions.push(output);statusItem=vscode.window.createStatusBarItem('mpc5777m.status',vscode.StatusBarAlignment.Left,10000);statusItem.name='MPC5777M PEmicro';statusItem.text='$(debug-alt) MPC5777M';statusItem.tooltip='Open MPC5777M PEmicro Flash & Debug';statusItem.command='mpc5777m.openPanel';statusItem.show();context.subscriptions.push(statusItem);const reg=(n,f)=>context.subscriptions.push(vscode.commands.registerCommand(n,async()=>{try{return await f();}catch(e){output.appendLine('[ERROR] '+(e.stack||e));output.show(true);vscode.window.showErrorMessage(String(e.message||e));}}));reg('mpc5777m.openPanel',()=>openPanel(context));reg('mpc5777m.attach',()=>debug(context,'attach'));reg('mpc5777m.download',()=>debug(context,'download'));reg('mpc5777m.resetDebug',()=>debug(context,'resetdebug'));reg('mpc5777m.eraseModule',()=>flashGuard(()=>runFlashServer(context,3)));reg('mpc5777m.eraseIfNotBlank',()=>unsupported('Erase If Not Blank'));reg('mpc5777m.blankCheckModule',()=>unsupported('Blank Check Module'));reg('mpc5777m.eraseRange',()=>unsupported('Erase Range'));reg('mpc5777m.blankCheckRange',()=>unsupported('Blank Check Range'));reg('mpc5777m.programModule',()=>flashGuard(()=>runFlashServer(context,1)));reg('mpc5777m.verifyModule',()=>flashGuard(()=>runFlashServer(context,2)));reg('mpc5777m.flashFull',()=>flashGuard(()=>runFlashServer(context,0,{runAfter:false})));reg('mpc5777m.resetRun',()=>flashGuard(()=>runFlashServer(context,0,{runAfter:true})));reg('mpc5777m.customCprog',()=>unsupported('Custom CPROG Sequence'));reg('mpc5777m.stopServer',()=>killServer());reg('mpc5777m.showVersions',()=>versions(context));reg('mpc5777m.detectHardware',()=>detect(context));}
+function activate(context){pemicroRuntimeRoot=undefined;console.log('[MPC5777M] extension activate');output=vscode.window.createOutputChannel('MPC5777M PEmicro');context.subscriptions.push(output);statusItem=vscode.window.createStatusBarItem('mpc5777m.status',vscode.StatusBarAlignment.Left,10000);statusItem.name='MPC5777M PEmicro';statusItem.text='$(debug-alt) MPC5777M';statusItem.tooltip='Open MPC5777M PEmicro Flash & Debug';statusItem.command='mpc5777m.openPanel';statusItem.show();context.subscriptions.push(statusItem);const reg=(n,f)=>context.subscriptions.push(vscode.commands.registerCommand(n,async()=>{try{return await f();}catch(e){output.appendLine('[ERROR] '+(e.stack||e));output.show(true);vscode.window.showErrorMessage(String(e.message||e));}}));reg('mpc5777m.openPanel',()=>openPanel(context));reg('mpc5777m.attach',()=>debug(context,'attach'));reg('mpc5777m.download',()=>debug(context,'download'));reg('mpc5777m.resetDebug',()=>debug(context,'resetdebug'));reg('mpc5777m.eraseModule',()=>flashGuard(()=>runFlashServer(context,3)));reg('mpc5777m.eraseAllPcp',()=>flashGuard(()=>runFlashServer(context,3,{usePcp:true})));reg('mpc5777m.eraseIfNotBlank',()=>unsupported('Erase If Not Blank'));reg('mpc5777m.blankCheckModule',()=>unsupported('Blank Check Module'));reg('mpc5777m.eraseRange',()=>unsupported('Erase Range'));reg('mpc5777m.blankCheckRange',()=>unsupported('Blank Check Range'));reg('mpc5777m.programModule',()=>flashGuard(()=>runFlashServer(context,1)));reg('mpc5777m.verifyModule',()=>flashGuard(()=>runFlashServer(context,2)));reg('mpc5777m.flashFull',()=>flashGuard(()=>runFlashServer(context,0,{runAfter:false})));reg('mpc5777m.resetRun',()=>flashGuard(()=>runFlashServer(context,0,{runAfter:true})));reg('mpc5777m.customCprog',()=>unsupported('Custom CPROG Sequence'));reg('mpc5777m.stopServer',()=>killServer());reg('mpc5777m.showVersions',()=>versions(context));reg('mpc5777m.detectHardware',()=>detect(context));}
 function deactivate(){}
 module.exports={activate,deactivate};
