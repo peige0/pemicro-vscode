@@ -2,7 +2,7 @@
   "name": "mpc5777m-pemicro-debug",
   "displayName": "MPC5777M PEmicro Debug & Flash",
   "description": "MPC5777M debugging and flash programming for VS Code with bundled PowerPC VLE GDB and PEmicro Power GDB Server.",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "publisher": "peige0",
   "license": "UNLICENSED",
   "engines": {
@@ -58,6 +58,11 @@
       {
         "command": "mpc5777m.eraseModule",
         "title": "MPC5777M: Flash - Erase Entire Flash (GDB Server)",
+        "category": "MPC5777M"
+      },
+      {
+        "command": "mpc5777m.eraseAllPcp",
+        "title": "MPC5777M: Flash - Erase All Using PCP",
         "category": "MPC5777M"
       },
       {
@@ -190,6 +195,11 @@
           "type": "string",
           "default": "",
           "description": "Optional original S32DS/PEmicro config.ini. When set, debug server launch uses this file instead of the bundled minimal config."
+        },
+        "mpc5777mDebug.pcpPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional MPC5777M PEmicro PCP algorithm. Empty = use nxp_mpc5777m_1x32x1984k_cflash.pcp from the selected PEmicro runtime."
         }
       }
     }
