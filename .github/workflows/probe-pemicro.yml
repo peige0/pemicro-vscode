@@ -11,22 +11,36 @@ jobs:
   probe:
     runs-on: windows-latest
     steps:
-      - name: Probe Power update artifacts
+      - name: Probe Power update artifacts by GET
         shell: pwsh
         run: |
-          $base = "https://www.pemicro.com/eclipse/updates/com.pemicro.debug.gdbjtag.ppc.updatesite"
-          $names = @("artifacts.jar","content.jar","p2.index","site.xml")
-          foreach ($n in $names) {
-            $u="$base/$n"
-            Write-Host "===== $u ====="
-            & curl.exe -I -L --max-time 30 $u
-          }
-          Write-Host "===== Direct plugin candidates ====="
-          $candidates = @(
-            "$base/plugins/com.pemicro.debug.gdbjtag.ppc_2.0.5.202210261806.jar",
-            "https://www.pemicro.com/eclipse/updates/plugins/com.pemicro.debug.gdbjtag.ppc_2.0.5.202210261806.jar"
+          $bases = @(
+            "https://www.pemicro.com/eclipse/updates/com.pemicro.debug.gdbjtag.ppc.updatesite",
+            "http://www.pemicro.com/eclipse/updates/com.pemicro.debug.gdbjtag.ppc.updatesite"
           )
-          foreach ($u in $candidates) {
-            Write-Host "===== $u ====="
-            & curl.exe -I -L --max-time 30 $u
+          foreach ($base in $bases) {
+            foreach ($n in @("artifacts.jar","content.jar","p2.index")) {
+              $u="$base/$n"
+              $out="probe-"+([IO.Path]::GetFileName($n))
+              Write-Host "===== GET $u ====="
+              & curl.exe -L -sS -w "HTTP=%{http_code} SIZE=%{size_download}\n" -o $out $u
+              if (Test-Path $out) {
+                Write-Host "LOCALSIZE=$((Get-Item $out).Length)"
+                if ($n -like "*.jar") {
+                  try { Expand-Archive $out -DestinationPath "x-$n" -Force; Get-ChildItem "x-$n" -Recurse | Select-Object -First 10 FullName,Length } catch { Write-Host $_ }
+                } else {
+                  Get-Content $out -TotalCount 20 -ErrorAction SilentlyContinue
+                }
+                Remove-Item $out -Force -ErrorAction SilentlyContinue
+              }
+            }
+          }
+          foreach ($u in @(
+            "https://www.pemicro.com/eclipse/updates/com.pemicro.debug.gdbjtag.ppc.updatesite/plugins/com.pemicro.debug.gdbjtag.ppc_2.0.5.202210261806.jar",
+            "https://www.pemicro.com/eclipse/updates/plugins/com.pemicro.debug.gdbjtag.ppc_2.0.5.202210261806.jar"
+          )) {
+            Write-Host "===== GET $u ====="
+            & curl.exe -L -sS -w "HTTP=%{http_code} SIZE=%{size_download}\n" -o plugin.jar $u
+            Write-Host "LOCALSIZE=$((Get-Item plugin.jar).Length)"
+            Remove-Item plugin.jar -Force -ErrorAction SilentlyContinue
           }
