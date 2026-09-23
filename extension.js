@@ -81,6 +81,7 @@ async function runFlashServer(context,type,{runAfter=false}={}){
     '-speed='+c.get('speed',5000),
     '-port='+c.get('port','USB1'),
     '-corenum='+c.get('core',0),
+    '-configfile='+p.download,
     '-programmingtype='+type,
     type===3?'-flashobjectfile=':'-flashobjectfile='+image,
     '-quitafterprogramming',
