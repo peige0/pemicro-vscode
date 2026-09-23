@@ -27,6 +27,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -41,6 +43,30 @@ jobs:
           NAME=$(node -p "require('./package.json').name")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "asset=$NAME-$VERSION-bundled.vsix" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release changelog
+        shell: bash
+        run: |
+          VERSION="${{ steps.pkg.outputs.version }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+
+          {
+            echo "## Changes in v$VERSION"
+            echo
+            if [ -n "$PREV_TAG" ]; then
+              git log --no-merges --pretty=format:'- %s (`%h`)' "$PREV_TAG"..HEAD
+              echo
+              echo
+              echo "### Changed files"
+              echo
+              git diff --stat "$PREV_TAG"..HEAD | sed 's/^/    /'
+            else
+              git log -20 --no-merges --pretty=format:'- %s (`%h`)'
+            fi
+          } > release-notes.md
+
+          echo "Generated release notes:"
+          cat release-notes.md
 
       - name: Install packaging dependencies
         run: |
@@ -147,7 +173,7 @@ jobs:
           tag_name: v${{ steps.pkg.outputs.version }}
           name: MPC5777M PEmicro Debug & Flash v${{ steps.pkg.outputs.version }}
           target_commitish: main
-          generate_release_notes: true
+          body_path: release-notes.md
           files: ${{ steps.pkg.outputs.asset }}
 
       - name: Publish VS Code Marketplace (optional)
