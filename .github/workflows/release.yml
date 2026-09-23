@@ -69,6 +69,22 @@ jobs:
         shell: pwsh
         run: vsce package --out "${{ steps.pkg.outputs.asset }}"
 
+      - name: Verify packaged VSIX contains GDB
+        shell: pwsh
+        run: |
+          $asset = "${{ steps.pkg.outputs.asset }}"
+          $check = Join-Path $PWD "vsix-check"
+          New-Item -ItemType Directory -Force $check | Out-Null
+          Copy-Item $asset "$asset.zip" -Force
+          Expand-Archive "$asset.zip" -DestinationPath $check -Force
+          $gdbInVsix = Join-Path $check "extension\resources\gdb\bin\powerpc-eabivle-gdb.exe"
+          $pthreadInVsix = Join-Path $check "extension\resources\gdb\bin\libwinpthread-1.dll"
+          if (-not (Test-Path $gdbInVsix)) { throw "VSIX does not contain bundled GDB" }
+          if (-not (Test-Path $pthreadInVsix)) { throw "VSIX does not contain libwinpthread-1.dll" }
+          $size = (Get-Item $asset).Length
+          if ($size -lt 1000000) { throw "VSIX is unexpectedly small: $size bytes" }
+          Write-Host "Verified bundled GDB. VSIX size: $size bytes"
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
