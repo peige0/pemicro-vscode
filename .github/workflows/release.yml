@@ -16,7 +16,8 @@ permissions:
 
 env:
   NXP_TOOLCHAIN_URL: http://italydelight.it/downloads/powerpc-eabivle-4_9.zip
-  NXP_TOOLCHAIN_SHA256: aef0796730eca7099fa9dcfb52e523bcedd20be321175b6f7bef307c30c20416
+  GDB_SHA256: 2fb128080e2fb917959955ce8e802a2741300b14106529aa308cdfb4901a236d
+  WINPTHREAD_SHA256: 32b745c0ba7ff57ccfa6bfaed576bed1a48590d79b80511c56b0e0829c38838f
 
 jobs:
   build-release:
@@ -43,10 +44,6 @@ jobs:
         run: |
           & curl.exe -L --fail --retry 3 --connect-timeout 30 -o nxp-powerpc-toolchain.zip $env:NXP_TOOLCHAIN_URL
           if ($LASTEXITCODE -ne 0) { throw "Toolchain download failed with curl exit code $LASTEXITCODE" }
-          $actual = (Get-FileHash nxp-powerpc-toolchain.zip -Algorithm SHA256).Hash.ToLower()
-          if ($actual -ne $env:NXP_TOOLCHAIN_SHA256) {
-            throw "Toolchain SHA256 mismatch. Expected $env:NXP_TOOLCHAIN_SHA256, got $actual"
-          }
 
       - name: Bundle GDB runtime
         shell: pwsh
@@ -55,8 +52,14 @@ jobs:
           $src = Join-Path $PWD "nxp-toolchain\powerpc-eabivle-4_9\bin"
           $dst = Join-Path $PWD "resources\gdb\bin"
           New-Item -ItemType Directory -Force $dst | Out-Null
-          Copy-Item (Join-Path $src "powerpc-eabivle-gdb.exe") $dst -Force
-          Copy-Item (Join-Path $src "libwinpthread-1.dll") $dst -Force
+          $gdb = Join-Path $src "powerpc-eabivle-gdb.exe"
+          $pthread = Join-Path $src "libwinpthread-1.dll"
+          $gdbHash = (Get-FileHash $gdb -Algorithm SHA256).Hash.ToLower()
+          $pthreadHash = (Get-FileHash $pthread -Algorithm SHA256).Hash.ToLower()
+          if ($gdbHash -ne $env:GDB_SHA256) { throw "GDB SHA256 mismatch: $gdbHash" }
+          if ($pthreadHash -ne $env:WINPTHREAD_SHA256) { throw "libwinpthread SHA256 mismatch: $pthreadHash" }
+          Copy-Item $gdb $dst -Force
+          Copy-Item $pthread $dst -Force
           & (Join-Path $dst "powerpc-eabivle-gdb.exe") --version | Select-Object -First 3
 
       - name: Install VSCE
