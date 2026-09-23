@@ -2,7 +2,6 @@ const vscode=require('vscode');
 const cp=require('child_process');
 const fs=require('fs');
 const path=require('path');
-const net=require('net');
 let output,statusItem,panel;
 let pemicroRuntimeRoot;
 function cfg(){return vscode.workspace.getConfiguration('mpc5777mDebug');}
@@ -40,32 +39,71 @@ async function ensurePemicroRuntime(context){
 }
 function need(p,n){if(!fs.existsSync(p))throw new Error(n+' not found: '+p);}
 function wait(ms){return new Promise(r=>setTimeout(r,ms));}
-function portOpen(port){return new Promise(resolve=>{const s=new net.Socket();let done=false;const end=v=>{if(done)return;done=true;try{s.destroy();}catch{}resolve(v);};s.setTimeout(250);s.once('connect',()=>end(true));s.once('timeout',()=>end(false));s.once('error',()=>end(false));s.connect(port,'127.0.0.1');});}
 async function killServer(){await new Promise(r=>cp.exec('taskkill /F /IM pegdbserver_power_console.exe',{windowsHide:true},()=>r()));await wait(200);}
 function execText(exe,args,cwd){return new Promise((resolve,reject)=>cp.execFile(exe,args,{cwd,windowsHide:true,maxBuffer:8*1024*1024},(e,a,b)=>{if(e){e.output=(a||'')+(b||'');reject(e);}else resolve((a||'')+(b||''));}));}
 async function startServer(context,mode){
   await ensurePemicroRuntime(context);
-  const p=rt(context),c=cfg();need(p.server,'PEmicro GDB Server');
+  const p=rt(context),c=cfg();
+  need(p.server,'PEmicro GDB Server');
   await killServer();
+
   const ini=p.externalConfig||(mode==='attach'?p.attach:(mode==='resetdebug'?p.reset:p.download));
-  const args=['-device='+c.get('device','MPC5777M'),'-startserver','-singlesession','-serverport='+c.get('serverPort',7224),'-gdbmiport='+c.get('gdbMiPort',6224),'-interface='+c.get('interface','USBMULTILINK'),'-speed='+c.get('speed',5000),'-port='+c.get('port','USB1')];
+  const args=[
+    '-device='+c.get('device','MPC5777M'),
+    '-startserver',
+    '-singlesession',
+    '-serverport='+c.get('serverPort',7224),
+    '-gdbmiport='+c.get('gdbMiPort',6224),
+    '-interface='+c.get('interface','USBMULTILINK'),
+    '-speed='+c.get('speed',5000),
+    '-port='+c.get('port','USB1')
+  ];
   const core=Number(c.get('core',0))||0;
   if(core>0)args.push('-corenum='+core);
   args.push('-configfile='+ini);
+
   output.appendLine('[SERVER] '+p.server+' '+args.join(' '));
   output.show(true);
-  const child=cp.spawn(p.server,args,{cwd:path.dirname(p.server),windowsHide:false,stdio:['ignore','pipe','pipe']});
-  let exited=false,exitCode=null;
-  child.stdout.on('data',d=>output.append(d.toString()));
-  child.stderr.on('data',d=>output.append(d.toString()));
-  child.on('exit',code=>{exited=true;exitCode=code;output.appendLine('[SERVER EXIT] code='+code);});
+
+  const child=cp.spawn(p.server,args,{
+    cwd:path.dirname(p.server),
+    windowsHide:false,
+    stdio:['ignore','pipe','pipe']
+  });
+
+  let exited=false,exitCode=null,ready=false,buffer='';
+  const onText=d=>{
+    const s=d.toString();
+    output.append(s);
+    buffer+=s;
+    if(
+      /All Servers Running/i.test(buffer) ||
+      /Server\s*1\s*running\s*on\s*127\.0\.0\.1[: ]+\d+/i.test(buffer) ||
+      /GDB\s*Server.*(?:running|listening)/i.test(buffer)
+    ) ready=true;
+    if(buffer.length>65536)buffer=buffer.slice(-32768);
+  };
+  child.stdout.on('data',onText);
+  child.stderr.on('data',onText);
+  child.on('exit',code=>{
+    exited=true;exitCode=code;
+    output.appendLine('[SERVER EXIT] code='+code);
+  });
   child.on('error',e=>output.appendLine('[SERVER ERROR] '+e.message));
+
+  // IMPORTANT: never connect to 7224 here. With -singlesession, a TCP probe
+  // becomes the one and only GDB session and causes the real CDT client to fail.
   for(let i=0;i<150;i++){
     await wait(200);
-    if(await portOpen(c.get('serverPort',7224))){output.appendLine('[SERVER] GDB port '+c.get('serverPort',7224)+' is open');return;}
-    if(exited)throw new Error('PEmicro server exited before opening port '+c.get('serverPort',7224)+' (code '+exitCode+'). See MPC5777M PEmicro output.');
+    if(ready){
+      await wait(300);
+      output.appendLine('[SERVER] Ready for CDT GDB client (no TCP probe used).');
+      return child;
+    }
+    if(exited)
+      throw new Error('PEmicro server exited before becoming ready (code '+exitCode+'). See MPC5777M PEmicro output.');
   }
-  throw new Error('PEmicro server did not open port '+c.get('serverPort',7224)+' within 30 seconds. See MPC5777M PEmicro output.');
+  throw new Error('PEmicro server did not report ready within 30 seconds. See MPC5777M PEmicro output.');
 }
 async function debug(context,mode){
   const f=ws();if(!f)throw new Error('Open a workspace first.');
