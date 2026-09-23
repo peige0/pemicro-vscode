@@ -14,9 +14,13 @@ on:
 permissions:
   contents: write
 
+env:
+  NXP_TOOLCHAIN_URL: https://italydelight.it/downloads/powerpc-eabivle-4_9.zip
+  NXP_TOOLCHAIN_SHA256: aef0796730eca7099fa9dcfb52e523bcedd20be321175b6f7bef307c30c20416
+
 jobs:
   build-release:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,19 +30,39 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Read package metadata
+        id: pkg
+        shell: pwsh
+        run: |
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          "version=$($pkg.version)" >> $env:GITHUB_OUTPUT
+          "asset=$($pkg.name)-$($pkg.version).vsix" >> $env:GITHUB_OUTPUT
+
+      - name: Download pinned NXP PowerPC toolchain
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri $env:NXP_TOOLCHAIN_URL -OutFile nxp-powerpc-toolchain.zip
+          $actual = (Get-FileHash nxp-powerpc-toolchain.zip -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $env:NXP_TOOLCHAIN_SHA256) {
+            throw "Toolchain SHA256 mismatch. Expected $env:NXP_TOOLCHAIN_SHA256, got $actual"
+          }
+
+      - name: Bundle GDB runtime
+        shell: pwsh
+        run: |
+          Expand-Archive nxp-powerpc-toolchain.zip -DestinationPath nxp-toolchain
+          $src = Join-Path $PWD "nxp-toolchain\powerpc-eabivle-4_9\bin"
+          $dst = Join-Path $PWD "resources\gdb\bin"
+          New-Item -ItemType Directory -Force $dst | Out-Null
+          Copy-Item (Join-Path $src "powerpc-eabivle-gdb.exe") $dst -Force
+          Copy-Item (Join-Path $src "libwinpthread-1.dll") $dst -Force
+          & (Join-Path $dst "powerpc-eabivle-gdb.exe") --version | Select-Object -First 3
+
       - name: Install VSCE
         run: npm install --global @vscode/vsce
 
-      - name: Read package metadata
-        id: pkg
-        shell: bash
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          NAME=$(node -p "require('./package.json').name")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "asset=$NAME-$VERSION.vsix" >> "$GITHUB_OUTPUT"
-
       - name: Package VSIX
+        shell: pwsh
         run: vsce package --out "${{ steps.pkg.outputs.asset }}"
 
       - name: Publish GitHub Release
@@ -52,5 +76,9 @@ jobs:
           body: |
             VS Code extension v${{ steps.pkg.outputs.version }}.
 
-            Flash operations use the PEmicro POWER GDB Server directly.
-            This public VSIX does not redistribute NXP/PEmicro proprietary runtime binaries.
+            Includes the pinned NXP PowerPC VLE GDB runtime:
+            - powerpc-eabivle-gdb.exe
+            - libwinpthread-1.dll
+
+            Flash/debug transport still requires PEmicro GDB Server.
+            PEmicro proprietary runtime binaries are not redistributed in this public release.
