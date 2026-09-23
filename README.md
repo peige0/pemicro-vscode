@@ -60,7 +60,7 @@ Flash operations use `pegdbserver_power_console.exe` directly with `-flashobject
 
 ## GitHub Release
 
-The GitHub Release publishes a **source/lite VSIX**. It does not redistribute NXP or PEmicro proprietary binaries.
+The GitHub Release bundles the NXP PowerPC VLE GDB runtime. It does not redistribute the proprietary PEmicro GDB Server.
 
 After installing the VSIX, configure these settings when the runtimes are not bundled locally:
 
