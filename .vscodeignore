@@ -5,3 +5,7 @@ scripts/**
 node_modules/**
 .vscode/**
 **/*.log
+gdb-seed/**
+pemicro-plugin/**
+pemicro-power.jar
+gdb-seed.vsix
