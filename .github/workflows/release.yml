@@ -43,33 +43,30 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "asset=$NAME-$VERSION-bundled.vsix" >> "$GITHUB_OUTPUT"
 
-      - name: Install build dependencies
+      - name: Install packaging dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y mingw-w64 make gcc g++ texinfo bison flex wget xz-utils zip unzip
+          sudo apt-get install -y unzip zip curl
 
-      - name: Download GNU GDB source
-        run: |
-          wget -q "https://ftp.gnu.org/gnu/gdb/gdb-$GDB_VERSION.tar.xz"
-          tar -xf "gdb-$GDB_VERSION.tar.xz"
-
-      - name: Build Windows PowerPC VLE GDB
+      - name: Reuse verified bundled GDB 7.8.2
         shell: bash
         run: |
-          mkdir gdb-build
-          cd gdb-build
-          "../gdb-$GDB_VERSION/configure"             --host=x86_64-w64-mingw32             --target=powerpc-eabivle             --disable-werror             --disable-nls             --without-python             --without-expat             --disable-tui             --disable-sim
-          make -j2 all-gdb
-          x86_64-w64-mingw32-strip --strip-unneeded gdb/gdb.exe
-
-      - name: Bundle GDB runtime
-        shell: bash
-        run: |
-          mkdir -p resources/gdb/bin
-          cp gdb-build/gdb/gdb.exe resources/gdb/bin/powerpc-eabivle-gdb.exe
-          PTHREAD=$(find /usr -type f -name libwinpthread-1.dll 2>/dev/null | head -n 1 || true)
-          if [ -n "$PTHREAD" ]; then cp "$PTHREAD" resources/gdb/bin/libwinpthread-1.dll; fi
+          GDB_SEED_URL="https://github.com/peige0/pemicro-vscode/releases/download/v1.3.8/mpc5777m-pemicro-debug-1.3.8-bundled.vsix"
+          GDB_SEED_SHA256="7413ba613ac4efd65b6062415abc974897bd79a96ce6504985a9cb9cc72968ec"
+          curl -L --fail --retry 3 --connect-timeout 30 -o gdb-seed.vsix "$GDB_SEED_URL"
+          ACTUAL=$(sha256sum gdb-seed.vsix | awk '{print $1}')
+          if [ "$ACTUAL" != "$GDB_SEED_SHA256" ]; then
+            echo "Seed VSIX SHA256 mismatch: $ACTUAL"
+            exit 1
+          fi
+          mkdir -p gdb-seed resources/gdb/bin
+          unzip -q gdb-seed.vsix -d gdb-seed
+          cp gdb-seed/extension/resources/gdb/bin/powerpc-eabivle-gdb.exe resources/gdb/bin/
+          if [ -f gdb-seed/extension/resources/gdb/bin/libwinpthread-1.dll ]; then
+            cp gdb-seed/extension/resources/gdb/bin/libwinpthread-1.dll resources/gdb/bin/
+          fi
           test -s resources/gdb/bin/powerpc-eabivle-gdb.exe
+          echo "Reused verified GDB; source compilation skipped."
 
       - name: Download full PEmicro Power plugin
         shell: bash
