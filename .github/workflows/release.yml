@@ -41,10 +41,10 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "asset=$NAME-$VERSION-bundled.vsix" >> "$GITHUB_OUTPUT"
 
-      - name: Install GDB cross-build dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y mingw-w64 make gcc g++ texinfo bison flex wget xz-utils
+          sudo apt-get install -y mingw-w64 make gcc g++ texinfo bison flex wget xz-utils zip unzip
 
       - name: Download GNU GDB source
         run: |
@@ -59,29 +59,17 @@ jobs:
           "../gdb-$GDB_VERSION/configure"             --host=x86_64-w64-mingw32             --target=powerpc-eabivle             --disable-werror             --disable-nls             --without-python             --without-expat             --disable-tui             --disable-sim
           make -j2 all-gdb
           x86_64-w64-mingw32-strip --strip-unneeded gdb/gdb.exe
-          file gdb/gdb.exe
-          x86_64-w64-mingw32-objdump -p gdb/gdb.exe | grep "DLL Name" || true
 
       - name: Bundle GDB runtime
         shell: bash
         run: |
           mkdir -p resources/gdb/bin
           cp gdb-build/gdb/gdb.exe resources/gdb/bin/powerpc-eabivle-gdb.exe
-
           PTHREAD=$(find /usr -type f -name libwinpthread-1.dll 2>/dev/null | head -n 1 || true)
-          if [ -n "$PTHREAD" ]; then
-            cp "$PTHREAD" resources/gdb/bin/libwinpthread-1.dll
-          fi
-
+          if [ -n "$PTHREAD" ]; then cp "$PTHREAD" resources/gdb/bin/libwinpthread-1.dll; fi
           test -s resources/gdb/bin/powerpc-eabivle-gdb.exe
-          GDB_SIZE=$(stat -c%s resources/gdb/bin/powerpc-eabivle-gdb.exe)
-          echo "Bundled GDB size: $GDB_SIZE"
-          if [ "$GDB_SIZE" -lt 3000000 ]; then
-            echo "GDB unexpectedly small"
-            exit 1
-          fi
 
-      - name: Download pinned PEmicro Power GDB Server 8.98
+      - name: Download full PEmicro Power plugin
         shell: bash
         run: |
           curl -L --fail --retry 3 --connect-timeout 30 -o pemicro-power.jar "$PEMICRO_URL"
@@ -93,16 +81,24 @@ jobs:
           mkdir pemicro-plugin
           unzip -q pemicro-power.jar -d pemicro-plugin
 
-      - name: Bundle PEmicro runtime
+      - name: Build single-file full PEmicro runtime archive
         shell: bash
         run: |
           test -f pemicro-plugin/win32/pegdbserver_power_console.exe
-          mkdir -p resources/pemicro/win32
-          cp -a pemicro-plugin/win32/. resources/pemicro/win32/
-
-          test -f "resources/pemicro/win32/gdi/unit_ngs_ppcnexus_internal.dll"
-          test -f "resources/pemicro/win32/gdi/P&E/nxp_mpc5777m_1x32x1984k_cflash.pcp"
-          test -f "resources/pemicro/win32/gdi/P&E/s32e200_mpc5777m.mac"
+          test -f "pemicro-plugin/win32/gdi/unit_ngs_ppcnexus_internal.dll"
+          test -f "pemicro-plugin/win32/gdi/P&E/nxp_mpc5777m_1x32x1984k_cflash.pcp"
+          test -f "pemicro-plugin/win32/gdi/P&E/s32e200_mpc5777m.mac"
+          mkdir -p resources/pemicro
+          (
+            cd pemicro-plugin
+            zip -q -r -9 ../resources/pemicro/pemicro-power-win32.zip win32
+          )
+          RUNTIME_SIZE=$(stat -c%s resources/pemicro/pemicro-power-win32.zip)
+          echo "Full PEmicro runtime archive: $RUNTIME_SIZE bytes"
+          if [ "$RUNTIME_SIZE" -lt 20000000 ]; then
+            echo "Full PEmicro runtime archive unexpectedly small"
+            exit 1
+          fi
 
       - name: Install VSCE
         run: npm install --global @vscode/vsce
@@ -121,23 +117,23 @@ jobs:
             exit 1
           fi
 
-          rm -rf vsix-check
-          mkdir vsix-check
+          rm -rf vsix-check runtime-check
+          mkdir vsix-check runtime-check
           unzip -q "$ASSET" -d vsix-check
 
+          test -f "vsix-check/extension/resources/gdb/bin/powerpc-eabivle-gdb.exe"
+          test -f "vsix-check/extension/resources/pemicro/pemicro-power-win32.zip"
+          test -f "vsix-check/extension/resources/config/pemicro_attach.ini"
+
+          unzip -q "vsix-check/extension/resources/pemicro/pemicro-power-win32.zip" -d runtime-check
           required=(
-            "extension/resources/gdb/bin/powerpc-eabivle-gdb.exe"
-            "extension/resources/pemicro/win32/pegdbserver_power_console.exe"
-            "extension/resources/pemicro/win32/gdi/unit_ngs_ppcnexus_internal.dll"
-            "extension/resources/pemicro/win32/gdi/P&E/nxp_mpc5777m_1x32x1984k_cflash.pcp"
-            "extension/resources/pemicro/win32/gdi/P&E/s32e200_mpc5777m.mac"
-            "extension/resources/config/pemicro_attach.ini"
+            "win32/pegdbserver_power_console.exe"
+            "win32/gdi/unit_ngs_ppcnexus_internal.dll"
+            "win32/gdi/P&E/nxp_mpc5777m_1x32x1984k_cflash.pcp"
+            "win32/gdi/P&E/s32e200_mpc5777m.mac"
           )
           for f in "${required[@]}"; do
-            if [ ! -f "vsix-check/$f" ]; then
-              echo "Missing from VSIX: $f"
-              exit 1
-            fi
+            test -f "runtime-check/$f" || { echo "Missing runtime file: $f"; exit 1; }
             echo "OK: $f"
           done
 
@@ -153,9 +149,9 @@ jobs:
             Full bundled VS Code extension v${{ steps.pkg.outputs.version }}.
 
             Included:
-            - reproducibly built GNU GDB 7.8.2, target powerpc-eabivle, Windows x64
-            - PEmicro Power GDB Server 8.98.00.00
-            - PEmicro GDI runtime
-            - MPC5777M flash algorithms and reset macro
+            - GNU GDB 7.8.2, target powerpc-eabivle, Windows x64
+            - complete PEmicro Power GDB Server 8.98 win32 runtime
+            - complete PEmicro GDI/device/algorithm files from the official plugin
+            - MPC5777M PCP and reset macro
 
-            GDB is built from GNU source during CI. The PEmicro plugin is fetched from the official PEmicro Eclipse update site and pinned by SHA-256.
+            To avoid VSCE stalling on thousands of PEmicro files, the complete PEmicro win32 runtime is stored inside the VSIX as one zip and extracted automatically on first use.
