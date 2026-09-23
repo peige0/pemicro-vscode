@@ -9,7 +9,6 @@ on:
       - "extension.js"
       - "resources/**"
       - ".vscodeignore"
-      - ".github/workflows/release.yml"
   workflow_dispatch:
 
 permissions:
@@ -150,16 +149,6 @@ jobs:
           target_commitish: main
           generate_release_notes: true
           files: ${{ steps.pkg.outputs.asset }}
-          body: |
-            Full bundled VS Code extension v${{ steps.pkg.outputs.version }}.
-
-            Included:
-            - GNU GDB 7.8.2, target powerpc-eabivle, Windows x64
-            - complete PEmicro Power GDB Server 8.98 win32 runtime
-            - complete PEmicro GDI/device/algorithm files from the official plugin
-            - MPC5777M PCP and reset macro
-
-            To avoid VSCE stalling on thousands of PEmicro files, the complete PEmicro win32 runtime is stored inside the VSIX as one zip and extracted automatically on first use.
 
       - name: Publish VS Code Marketplace (optional)
         if: ${{ env.VSCE_PAT != '' }}
