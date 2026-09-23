@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 env:
-  NXP_TOOLCHAIN_URL: https://italydelight.it/downloads/powerpc-eabivle-4_9.zip
+  NXP_TOOLCHAIN_URL: http://italydelight.it/downloads/powerpc-eabivle-4_9.zip
   NXP_TOOLCHAIN_SHA256: aef0796730eca7099fa9dcfb52e523bcedd20be321175b6f7bef307c30c20416
 
 jobs:
@@ -41,7 +41,8 @@ jobs:
       - name: Download pinned NXP PowerPC toolchain
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri $env:NXP_TOOLCHAIN_URL -OutFile nxp-powerpc-toolchain.zip
+          & curl.exe -L --fail --retry 3 --connect-timeout 30 -o nxp-powerpc-toolchain.zip $env:NXP_TOOLCHAIN_URL
+          if ($LASTEXITCODE -ne 0) { throw "Toolchain download failed with curl exit code $LASTEXITCODE" }
           $actual = (Get-FileHash nxp-powerpc-toolchain.zip -Algorithm SHA256).Hash.ToLower()
           if ($actual -ne $env:NXP_TOOLCHAIN_SHA256) {
             throw "Toolchain SHA256 mismatch. Expected $env:NXP_TOOLCHAIN_SHA256, got $actual"
