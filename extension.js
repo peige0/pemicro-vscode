@@ -3,17 +3,45 @@ const cp=require('child_process');
 const fs=require('fs');
 const path=require('path');
 const net=require('net');
-let output,statusItem,panel;
+let output,statusItem,panel;\nlet pemicroRuntimeRoot;
 function cfg(){return vscode.workspace.getConfiguration('mpc5777mDebug');}
 function ws(){const e=vscode.window.activeTextEditor;if(e){const f=vscode.workspace.getWorkspaceFolder(e.document.uri);if(f)return f;}return vscode.workspace.workspaceFolders&&vscode.workspace.workspaceFolders[0];}
 function rp(f,p){return path.isAbsolute(p)?p:path.join(f.uri.fsPath,p);}
-function rt(context){const pe=path.join(context.extensionPath,'resources','pemicro','win32');return{gdb:cfg().get('gdbPath','').trim()||path.join(context.extensionPath,'resources','gdb','bin','powerpc-eabivle-gdb.exe'),server:cfg().get('serverPath','').trim()||path.join(pe,'pegdbserver_power_console.exe'),peRoot:pe,attach:path.join(context.extensionPath,'resources','config','pemicro_attach.ini'),download:path.join(context.extensionPath,'resources','config','pemicro_download.ini'),reset:path.join(context.extensionPath,'resources','config','pemicro_reset_debug.ini'),algo:path.join(pe,'gdi','P&E','nxp_mpc5777m_1x32x1984k_cflash.pcp')};}
+function rt(context){
+  const pe=pemicroRuntimeRoot||path.join(context.extensionPath,'resources','pemicro','win32');
+  return{
+    gdb:cfg().get('gdbPath','').trim()||path.join(context.extensionPath,'resources','gdb','bin','powerpc-eabivle-gdb.exe'),
+    server:cfg().get('serverPath','').trim()||path.join(pe,'pegdbserver_power_console.exe'),
+    peRoot:pe,
+    attach:path.join(context.extensionPath,'resources','config','pemicro_attach.ini'),
+    download:path.join(context.extensionPath,'resources','config','pemicro_download.ini'),
+    reset:path.join(context.extensionPath,'resources','config','pemicro_reset_debug.ini'),
+    algo:path.join(pe,'gdi','P&E','nxp_mpc5777m_1x32x1984k_cflash.pcp')
+  };
+}
+async function ensurePemicroRuntime(context){
+  const configured=cfg().get('serverPath','').trim();
+  if(configured)return;
+  const root=path.join(context.globalStorageUri.fsPath,'pemicro-8.98');
+  const pe=path.join(root,'win32');
+  const server=path.join(pe,'pegdbserver_power_console.exe');
+  if(fs.existsSync(server)){pemicroRuntimeRoot=pe;return;}
+  const archive=path.join(context.extensionPath,'resources','pemicro','pemicro-power-win32.zip');
+  need(archive,'Bundled PEmicro runtime archive');
+  fs.mkdirSync(root,{recursive:true});
+  output&&output.appendLine('[RUNTIME] Extracting full PEmicro 8.98 runtime...');
+  const ps='Expand-Archive -LiteralPath '+JSON.stringify(archive)+' -DestinationPath '+JSON.stringify(root)+' -Force';
+  await execText('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-Command',ps],context.extensionPath);
+  need(server,'Extracted PEmicro GDB Server');
+  pemicroRuntimeRoot=pe;
+  output&&output.appendLine('[RUNTIME] PEmicro runtime ready: '+pe);
+}
 function need(p,n){if(!fs.existsSync(p))throw new Error(n+' not found: '+p);}
 function wait(ms){return new Promise(r=>setTimeout(r,ms));}
 function portOpen(port){return new Promise(resolve=>{const s=new net.Socket();let done=false;const end=v=>{if(done)return;done=true;try{s.destroy();}catch{}resolve(v);};s.setTimeout(250);s.once('connect',()=>end(true));s.once('timeout',()=>end(false));s.once('error',()=>end(false));s.connect(port,'127.0.0.1');});}
 async function killServer(){await new Promise(r=>cp.exec('taskkill /F /IM pegdbserver_power_console.exe',{windowsHide:true},()=>r()));await wait(200);}
 function execText(exe,args,cwd){return new Promise((resolve,reject)=>cp.execFile(exe,args,{cwd,windowsHide:true,maxBuffer:8*1024*1024},(e,a,b)=>{if(e){e.output=(a||'')+(b||'');reject(e);}else resolve((a||'')+(b||''));}));}
-async function startServer(context,mode){const p=rt(context),c=cfg();need(p.server,'PEmicro GDB Server');await killServer();const ini=mode==='attach'?p.attach:(mode==='resetdebug'?p.reset:p.download);const args=['-device='+c.get('device','MPC5777M'),'-startserver','-singlesession','-serverport='+c.get('serverPort',7224),'-gdbmiport='+c.get('gdbMiPort',6224),'-interface='+c.get('interface','USBMULTILINK'),'-speed='+c.get('speed',5000),'-port='+c.get('port','USB1'),'-corenum='+c.get('core',0),'-configfile='+ini];output.appendLine('[SERVER] '+p.server+' '+args.join(' '));const child=cp.spawn(p.server,args,{cwd:path.dirname(p.server),windowsHide:false,detached:true,stdio:'ignore'});child.unref();for(let i=0;i<50;i++){await wait(200);if(await portOpen(c.get('serverPort',7224)))return;}throw new Error('PEmicro server did not open port '+c.get('serverPort',7224));}
+async function startServer(context,mode){await ensurePemicroRuntime(context);const p=rt(context),c=cfg();need(p.server,'PEmicro GDB Server');await killServer();const ini=mode==='attach'?p.attach:(mode==='resetdebug'?p.reset:p.download);const args=['-device='+c.get('device','MPC5777M'),'-startserver','-singlesession','-serverport='+c.get('serverPort',7224),'-gdbmiport='+c.get('gdbMiPort',6224),'-interface='+c.get('interface','USBMULTILINK'),'-speed='+c.get('speed',5000),'-port='+c.get('port','USB1'),'-corenum='+c.get('core',0),'-configfile='+ini];output.appendLine('[SERVER] '+p.server+' '+args.join(' '));const child=cp.spawn(p.server,args,{cwd:path.dirname(p.server),windowsHide:false,detached:true,stdio:'ignore'});child.unref();for(let i=0;i<50;i++){await wait(200);if(await portOpen(c.get('serverPort',7224)))return;}throw new Error('PEmicro server did not open port '+c.get('serverPort',7224));}
 async function debug(context,mode){const f=ws();if(!f)throw new Error('Open a workspace first.');const p=rt(context);need(p.gdb,'powerpc-eabivle-gdb.exe');const elf=rp(f,cfg().get('elfPath','Bin/Project.elf'));need(elf,'ELF');await startServer(context,mode);const pre=[];if(mode==='download')pre.push('load');if(mode==='resetdebug')pre.push('load','monitor reset');const dc={name:'MPC5777M - '+mode,type:'gdbtarget',request:'attach',program:elf,gdb:p.gdb.replace(/\\/g,'/'),cwd:f.uri.fsPath,target:{type:'remote',host:'127.0.0.1',port:String(cfg().get('serverPort',7224))},gdbAsync:true,gdbNonStop:false,run:'all',updateThreadInfo:cfg().get('updateThreadInfo','missing'),preConnectCommands:['set backtrace limit 1'],preRunCommands:pre,verbose:cfg().get('verbose',false)};if(!await vscode.debug.startDebugging(f,dc))throw new Error('Could not start CDT GDB session.');}
 function flashImage(f){return rp(f,cfg().get('programImagePath','Bin/Project.elf'));}
 async function runFlashServer(context,type,{runAfter=false}={}){
@@ -54,8 +82,8 @@ async function unsupported(name){
 }
 async function flashGuard(fn){const x=await vscode.window.showWarningMessage('This may erase/program/reset the target. Continue?',{modal:true},'Continue');if(x==='Continue')return fn();}
 async function range(){const a=await vscode.window.showInputBox({prompt:'Start address (hex)',value:'00400000'});if(!a)return;const b=await vscode.window.showInputBox({prompt:'End address (hex)',value:'005FFFFF'});if(!b)return;return[hx(a),hx(b)];}
-async function versions(context){const p=rt(context);output.clear();try{output.appendLine('=== GDB ===\n'+await execText(p.gdb,['--version'],path.dirname(p.gdb)));}catch(e){output.appendLine('GDB ERROR: '+(e.output||e.message));}try{output.appendLine('\n=== PEmicro ===\n'+await execText(p.server,['-h'],path.dirname(p.server)));}catch(e){output.appendLine('PEmicro ERROR: '+(e.output||e.message));}output.show(true);}
-async function detect(context){const p=rt(context);need(p.server,'PEmicro GDB Server');await killServer();output.clear();output.appendLine(await execText(p.server,['-showhardware'],path.dirname(p.server)));output.show(true);}
+async function versions(context){await ensurePemicroRuntime(context);const p=rt(context);output.clear();try{output.appendLine('=== GDB ===\n'+await execText(p.gdb,['--version'],path.dirname(p.gdb)));}catch(e){output.appendLine('GDB ERROR: '+(e.output||e.message));}try{output.appendLine('\n=== PEmicro ===\n'+await execText(p.server,['-h'],path.dirname(p.server)));}catch(e){output.appendLine('PEmicro ERROR: '+(e.output||e.message));}output.show(true);}
+async function detect(context){await ensurePemicroRuntime(context);const p=rt(context);need(p.server,'PEmicro GDB Server');await killServer();output.clear();output.appendLine(await execText(p.server,['-showhardware'],path.dirname(p.server)));output.show(true);}
 function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
 function html(){
   const c=cfg();
@@ -149,6 +177,6 @@ async function openPanel(context){
     }
   });
 }
-function activate(context){output=vscode.window.createOutputChannel('MPC5777M PEmicro');context.subscriptions.push(output);statusItem=vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left,50);statusItem.text='$(debug-alt) MPC5777M';statusItem.command='mpc5777m.openPanel';statusItem.show();context.subscriptions.push(statusItem);const reg=(n,f)=>context.subscriptions.push(vscode.commands.registerCommand(n,async()=>{try{return await f();}catch(e){output.appendLine('[ERROR] '+(e.stack||e));output.show(true);vscode.window.showErrorMessage(String(e.message||e));}}));reg('mpc5777m.openPanel',()=>openPanel(context));reg('mpc5777m.attach',()=>debug(context,'attach'));reg('mpc5777m.download',()=>debug(context,'download'));reg('mpc5777m.resetDebug',()=>debug(context,'resetdebug'));reg('mpc5777m.eraseModule',()=>flashGuard(()=>runFlashServer(context,3)));reg('mpc5777m.eraseIfNotBlank',()=>unsupported('Erase If Not Blank'));reg('mpc5777m.blankCheckModule',()=>unsupported('Blank Check Module'));reg('mpc5777m.eraseRange',()=>unsupported('Erase Range'));reg('mpc5777m.blankCheckRange',()=>unsupported('Blank Check Range'));reg('mpc5777m.programModule',()=>flashGuard(()=>runFlashServer(context,1)));reg('mpc5777m.verifyModule',()=>flashGuard(()=>runFlashServer(context,2)));reg('mpc5777m.flashFull',()=>flashGuard(()=>runFlashServer(context,0,{runAfter:false})));reg('mpc5777m.resetRun',()=>flashGuard(()=>runFlashServer(context,0,{runAfter:true})));reg('mpc5777m.customCprog',()=>unsupported('Custom CPROG Sequence'));reg('mpc5777m.stopServer',()=>killServer());reg('mpc5777m.showVersions',()=>versions(context));reg('mpc5777m.detectHardware',()=>detect(context));}
+function activate(context){pemicroRuntimeRoot=undefined;output=vscode.window.createOutputChannel('MPC5777M PEmicro');context.subscriptions.push(output);statusItem=vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left,50);statusItem.text='$(debug-alt) MPC5777M';statusItem.command='mpc5777m.openPanel';statusItem.show();context.subscriptions.push(statusItem);const reg=(n,f)=>context.subscriptions.push(vscode.commands.registerCommand(n,async()=>{try{return await f();}catch(e){output.appendLine('[ERROR] '+(e.stack||e));output.show(true);vscode.window.showErrorMessage(String(e.message||e));}}));reg('mpc5777m.openPanel',()=>openPanel(context));reg('mpc5777m.attach',()=>debug(context,'attach'));reg('mpc5777m.download',()=>debug(context,'download'));reg('mpc5777m.resetDebug',()=>debug(context,'resetdebug'));reg('mpc5777m.eraseModule',()=>flashGuard(()=>runFlashServer(context,3)));reg('mpc5777m.eraseIfNotBlank',()=>unsupported('Erase If Not Blank'));reg('mpc5777m.blankCheckModule',()=>unsupported('Blank Check Module'));reg('mpc5777m.eraseRange',()=>unsupported('Erase Range'));reg('mpc5777m.blankCheckRange',()=>unsupported('Blank Check Range'));reg('mpc5777m.programModule',()=>flashGuard(()=>runFlashServer(context,1)));reg('mpc5777m.verifyModule',()=>flashGuard(()=>runFlashServer(context,2)));reg('mpc5777m.flashFull',()=>flashGuard(()=>runFlashServer(context,0,{runAfter:false})));reg('mpc5777m.resetRun',()=>flashGuard(()=>runFlashServer(context,0,{runAfter:true})));reg('mpc5777m.customCprog',()=>unsupported('Custom CPROG Sequence'));reg('mpc5777m.stopServer',()=>killServer());reg('mpc5777m.showVersions',()=>versions(context));reg('mpc5777m.detectHardware',()=>detect(context));}
 function deactivate(){}
 module.exports={activate,deactivate};
