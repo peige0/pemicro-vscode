@@ -2,7 +2,7 @@
   "name": "mpc5777m-pemicro-debug",
   "displayName": "MPC5777M PEmicro Debug & Flash",
   "description": "MPC5777M debugging and flash programming for VS Code with bundled PowerPC VLE GDB and PEmicro Power GDB Server.",
-  "version": "1.4.9",
+  "version": "1.5.0",
   "publisher": "peige0",
   "license": "UNLICENSED",
   "engines": {
@@ -179,7 +179,7 @@
         "mpc5777mDebug.gdbPath": {
           "type": "string",
           "default": "",
-          "description": "Optional GDB path. Empty = bundled reproducible GNU GDB 7.8.2 for powerpc-eabivle."
+          "description": "Optional GDB path. Empty = auto-detect NXP S32DS powerpc-eabivle-gdb.exe first, then fall back to bundled GNU GDB."
         },
         "mpc5777mDebug.serverPath": {
           "type": "string",
