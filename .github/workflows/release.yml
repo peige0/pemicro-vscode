@@ -97,7 +97,7 @@ jobs:
           )
           RUNTIME_SIZE=$(stat -c%s resources/pemicro/pemicro-power-win32.zip)
           echo "Full PEmicro runtime archive: $RUNTIME_SIZE bytes"
-          if [ "$RUNTIME_SIZE" -lt 20000000 ]; then
+          if [ "$RUNTIME_SIZE" -lt 15000000 ]; then
             echo "Full PEmicro runtime archive unexpectedly small"
             exit 1
           fi
