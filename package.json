@@ -2,7 +2,7 @@
   "name": "mpc5777m-pemicro-debug",
   "displayName": "MPC5777M PEmicro Debug & Flash",
   "description": "MPC5777M debugging and PEmicro GDB Server flash operations for VS Code.",
-  "version": "1.3.1",
+  "version": "1.3.3",
   "publisher": "peige0",
   "license": "UNLICENSED",
   "engines": {
@@ -121,11 +121,13 @@
       "properties": {
         "mpc5777mDebug.elfPath": {
           "type": "string",
-          "default": "Bin/Project.elf"
+          "default": "Bin/Project.elf",
+          "description": "ELF used for source-level debugging."
         },
         "mpc5777mDebug.programImagePath": {
           "type": "string",
-          "default": "Bin/Project.elf"
+          "default": "Bin/Project.elf",
+          "description": "ELF/S19/HEX image used for flash programming."
         },
         "mpc5777mDebug.device": {
           "type": "string",
@@ -154,7 +156,8 @@
           "type": "number",
           "default": 6224,
           "minimum": 1,
-          "maximum": 65535
+          "maximum": 65535,
+          "description": "PEmicro GDB/MI auxiliary port."
         },
         "mpc5777mDebug.core": {
           "type": "number",
