@@ -11,19 +11,22 @@ jobs:
   probe:
     runs-on: windows-latest
     steps:
-      - name: Probe Power update metadata
+      - name: Probe Power update artifacts
         shell: pwsh
         run: |
           $base = "https://www.pemicro.com/eclipse/updates/com.pemicro.debug.gdbjtag.ppc.updatesite"
-          $urls = @(
-            "$base/artifacts.xml",
-            "$base/content.xml",
-            "$base/site.xml",
-            "$base/compositeArtifacts.xml",
-            "$base/compositeContent.xml"
-          )
-          foreach ($u in $urls) {
+          $names = @("artifacts.jar","content.jar","p2.index","site.xml")
+          foreach ($n in $names) {
+            $u="$base/$n"
             Write-Host "===== $u ====="
-            & curl.exe -L --max-time 30 $u
-            Write-Host ""
+            & curl.exe -I -L --max-time 30 $u
+          }
+          Write-Host "===== Direct plugin candidates ====="
+          $candidates = @(
+            "$base/plugins/com.pemicro.debug.gdbjtag.ppc_2.0.5.202210261806.jar",
+            "https://www.pemicro.com/eclipse/updates/plugins/com.pemicro.debug.gdbjtag.ppc_2.0.5.202210261806.jar"
+          )
+          foreach ($u in $candidates) {
+            Write-Host "===== $u ====="
+            & curl.exe -I -L --max-time 30 $u
           }
