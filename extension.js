@@ -14,6 +14,7 @@ function rt(context){
     gdb:cfg().get('gdbPath','').trim()||path.join(context.extensionPath,'resources','gdb','bin','powerpc-eabivle-gdb.exe'),
     server:cfg().get('serverPath','').trim()||path.join(pe,'pegdbserver_power_console.exe'),
     peRoot:pe,
+    externalConfig:cfg().get('pemicroConfigPath','').trim(),
     attach:path.join(context.extensionPath,'resources','config','pemicro_attach.ini'),
     download:path.join(context.extensionPath,'resources','config','pemicro_download.ini'),
     reset:path.join(context.extensionPath,'resources','config','pemicro_reset_debug.ini'),
@@ -46,7 +47,7 @@ async function startServer(context,mode){
   await ensurePemicroRuntime(context);
   const p=rt(context),c=cfg();need(p.server,'PEmicro GDB Server');
   await killServer();
-  const ini=mode==='attach'?p.attach:(mode==='resetdebug'?p.reset:p.download);
+  const ini=p.externalConfig||(mode==='attach'?p.attach:(mode==='resetdebug'?p.reset:p.download));
   const args=['-device='+c.get('device','MPC5777M'),'-startserver','-singlesession','-serverport='+c.get('serverPort',7224),'-gdbmiport='+c.get('gdbMiPort',6224),'-interface='+c.get('interface','USBMULTILINK'),'-speed='+c.get('speed',5000),'-port='+c.get('port','USB1'),'-corenum='+c.get('core',0),'-configfile='+ini];
   output.appendLine('[SERVER] '+p.server+' '+args.join(' '));
   output.show(true);
@@ -125,6 +126,7 @@ function html(){
 '<label>Program image</label><input id="image" value="'+esc(c.get('programImagePath','Bin/Project.elf'))+'"><button onclick="browse(&quot;image&quot;)">Browse</button>',
 '<label>GDB path</label><input id="gdb" value="'+esc(c.get('gdbPath',''))+'" placeholder="Empty = bundled GDB"><button onclick="browse(&quot;gdb&quot;)">Browse</button>',
 '<label>PEmicro server</label><input id="server" value="'+esc(c.get('serverPath',''))+'" placeholder="Empty = bundled pegdbserver_power_console.exe"><button onclick="browse(&quot;server&quot;)">Browse</button>',
+'<label>PEmicro config</label><input id="peconfig" value="'+esc(c.get('pemicroConfigPath',''))+'" placeholder="Optional original S32DS config.ini"><button onclick="browse(&quot;peconfig&quot;)">Browse</button>',
 '</div><div class="mini">',
 '<div><label>Device</label><input id="device" value="'+esc(c.get('device','MPC5777M'))+'"></div>',
 '<div><label>Interface</label><input id="iface" value="'+esc(c.get('interface','USBMULTILINK'))+'"></div>',
@@ -140,7 +142,7 @@ function html(){
 '<script>',
 'const vscode=acquireVsCodeApi();',
 'const q=id=>document.getElementById(id);',
-'function values(){return {elf:q("elf").value,image:q("image").value,gdb:q("gdb").value,server:q("server").value,device:q("device").value,iface:q("iface").value,port:q("port").value,speed:q("speed").value,core:q("core").value,gdbport:q("gdbport").value};}',
+'function values(){return {elf:q("elf").value,image:q("image").value,gdb:q("gdb").value,server:q("server").value,peconfig:q("peconfig").value,device:q("device").value,iface:q("iface").value,port:q("port").value,speed:q("speed").value,core:q("core").value,gdbport:q("gdbport").value};}',
 'function send(c){vscode.postMessage({command:c,...values()});}',
 'function save(){vscode.postMessage({command:"save",...values()});}',
 'function browse(kind){vscode.postMessage({command:"browse",kind});}',
@@ -152,7 +154,7 @@ async function savePanelConfig(m){
   const c=cfg();
   const target=vscode.ConfigurationTarget.Workspace;
   const updates=[
-    ['elfPath',m.elf],['programImagePath',m.image],['gdbPath',m.gdb],['serverPath',m.server],
+    ['elfPath',m.elf],['programImagePath',m.image],['gdbPath',m.gdb],['serverPath',m.server],['pemicroConfigPath',m.peconfig],
     ['device',m.device],['interface',m.iface],['port',m.port],
     ['speed',Number(m.speed)||5000],['core',Number(m.core)||0],['serverPort',Number(m.gdbport)||7224]
   ];
@@ -170,6 +172,7 @@ async function openPanel(context){
       if(m.command==='browse'){
         const filters=m.kind==='elf'?{'ELF':['elf'],'All files':['*']}:
           m.kind==='image'?{'Program images':['elf','s19','srec','hex','mot'],'All files':['*']}:
+          m.kind==='peconfig'?{'Config':['ini'],'All files':['*']}:
           {'Executable':['exe'],'All files':['*']};
         const u=await vscode.window.showOpenDialog({canSelectMany:false,filters,defaultUri:folder.uri});
         if(u&&u[0]){
