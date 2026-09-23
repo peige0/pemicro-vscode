@@ -11,36 +11,14 @@ jobs:
   probe:
     runs-on: windows-latest
     steps:
-      - name: Probe Power update artifacts by GET
+      - name: Hash exact Power plugin
         shell: pwsh
         run: |
-          $bases = @(
-            "https://www.pemicro.com/eclipse/updates/com.pemicro.debug.gdbjtag.ppc.updatesite",
-            "http://www.pemicro.com/eclipse/updates/com.pemicro.debug.gdbjtag.ppc.updatesite"
-          )
-          foreach ($base in $bases) {
-            foreach ($n in @("artifacts.jar","content.jar","p2.index")) {
-              $u="$base/$n"
-              $out="probe-"+([IO.Path]::GetFileName($n))
-              Write-Host "===== GET $u ====="
-              & curl.exe -L -sS -w "HTTP=%{http_code} SIZE=%{size_download}\n" -o $out $u
-              if (Test-Path $out) {
-                Write-Host "LOCALSIZE=$((Get-Item $out).Length)"
-                if ($n -like "*.jar") {
-                  try { Expand-Archive $out -DestinationPath "x-$n" -Force; Get-ChildItem "x-$n" -Recurse | Select-Object -First 10 FullName,Length } catch { Write-Host $_ }
-                } else {
-                  Get-Content $out -TotalCount 20 -ErrorAction SilentlyContinue
-                }
-                Remove-Item $out -Force -ErrorAction SilentlyContinue
-              }
-            }
-          }
-          foreach ($u in @(
-            "https://www.pemicro.com/eclipse/updates/com.pemicro.debug.gdbjtag.ppc.updatesite/plugins/com.pemicro.debug.gdbjtag.ppc_2.0.5.202210261806.jar",
-            "https://www.pemicro.com/eclipse/updates/plugins/com.pemicro.debug.gdbjtag.ppc_2.0.5.202210261806.jar"
-          )) {
-            Write-Host "===== GET $u ====="
-            & curl.exe -L -sS -w "HTTP=%{http_code} SIZE=%{size_download}\n" -o plugin.jar $u
-            Write-Host "LOCALSIZE=$((Get-Item plugin.jar).Length)"
-            Remove-Item plugin.jar -Force -ErrorAction SilentlyContinue
-          }
+          $u="https://www.pemicro.com/eclipse/updates/com.pemicro.debug.gdbjtag.ppc.updatesite/plugins/com.pemicro.debug.gdbjtag.ppc_2.0.5.202210261806.jar"
+          & curl.exe -L --fail --retry 3 -o pemicro-power.jar $u
+          $h=(Get-FileHash pemicro-power.jar -Algorithm SHA256).Hash.ToLower()
+          $s=(Get-Item pemicro-power.jar).Length
+          Write-Host "PEMICRO_SHA256=$h"
+          Write-Host "PEMICRO_SIZE=$s"
+          Expand-Archive pemicro-power.jar -DestinationPath p -Force
+          & ".\p\win32\pegdbserver_power_console.exe" -h | Select-Object -First 6
