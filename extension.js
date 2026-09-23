@@ -42,7 +42,27 @@ function wait(ms){return new Promise(r=>setTimeout(r,ms));}
 function portOpen(port){return new Promise(resolve=>{const s=new net.Socket();let done=false;const end=v=>{if(done)return;done=true;try{s.destroy();}catch{}resolve(v);};s.setTimeout(250);s.once('connect',()=>end(true));s.once('timeout',()=>end(false));s.once('error',()=>end(false));s.connect(port,'127.0.0.1');});}
 async function killServer(){await new Promise(r=>cp.exec('taskkill /F /IM pegdbserver_power_console.exe',{windowsHide:true},()=>r()));await wait(200);}
 function execText(exe,args,cwd){return new Promise((resolve,reject)=>cp.execFile(exe,args,{cwd,windowsHide:true,maxBuffer:8*1024*1024},(e,a,b)=>{if(e){e.output=(a||'')+(b||'');reject(e);}else resolve((a||'')+(b||''));}));}
-async function startServer(context,mode){await ensurePemicroRuntime(context);const p=rt(context),c=cfg();need(p.server,'PEmicro GDB Server');await killServer();const ini=mode==='attach'?p.attach:(mode==='resetdebug'?p.reset:p.download);const args=['-device='+c.get('device','MPC5777M'),'-startserver','-singlesession','-serverport='+c.get('serverPort',7224),'-gdbmiport='+c.get('gdbMiPort',6224),'-interface='+c.get('interface','USBMULTILINK'),'-speed='+c.get('speed',5000),'-port='+c.get('port','USB1'),'-corenum='+c.get('core',0),'-configfile='+ini];output.appendLine('[SERVER] '+p.server+' '+args.join(' '));const child=cp.spawn(p.server,args,{cwd:path.dirname(p.server),windowsHide:false,detached:true,stdio:'ignore'});child.unref();for(let i=0;i<50;i++){await wait(200);if(await portOpen(c.get('serverPort',7224)))return;}throw new Error('PEmicro server did not open port '+c.get('serverPort',7224));}
+async function startServer(context,mode){
+  await ensurePemicroRuntime(context);
+  const p=rt(context),c=cfg();need(p.server,'PEmicro GDB Server');
+  await killServer();
+  const ini=mode==='attach'?p.attach:(mode==='resetdebug'?p.reset:p.download);
+  const args=['-device='+c.get('device','MPC5777M'),'-startserver','-singlesession','-serverport='+c.get('serverPort',7224),'-gdbmiport='+c.get('gdbMiPort',6224),'-interface='+c.get('interface','USBMULTILINK'),'-speed='+c.get('speed',5000),'-port='+c.get('port','USB1'),'-corenum='+c.get('core',0),'-configfile='+ini];
+  output.appendLine('[SERVER] '+p.server+' '+args.join(' '));
+  output.show(true);
+  const child=cp.spawn(p.server,args,{cwd:path.dirname(p.server),windowsHide:false,stdio:['ignore','pipe','pipe']});
+  let exited=false,exitCode=null;
+  child.stdout.on('data',d=>output.append(d.toString()));
+  child.stderr.on('data',d=>output.append(d.toString()));
+  child.on('exit',code=>{exited=true;exitCode=code;output.appendLine('[SERVER EXIT] code='+code);});
+  child.on('error',e=>output.appendLine('[SERVER ERROR] '+e.message));
+  for(let i=0;i<150;i++){
+    await wait(200);
+    if(await portOpen(c.get('serverPort',7224))){output.appendLine('[SERVER] GDB port '+c.get('serverPort',7224)+' is open');return;}
+    if(exited)throw new Error('PEmicro server exited before opening port '+c.get('serverPort',7224)+' (code '+exitCode+'). See MPC5777M PEmicro output.');
+  }
+  throw new Error('PEmicro server did not open port '+c.get('serverPort',7224)+' within 30 seconds. See MPC5777M PEmicro output.');
+}
 async function debug(context,mode){const f=ws();if(!f)throw new Error('Open a workspace first.');const p=rt(context);need(p.gdb,'powerpc-eabivle-gdb.exe');const elf=rp(f,cfg().get('elfPath','Bin/Project.elf'));need(elf,'ELF');await startServer(context,mode);const pre=[];if(mode==='download')pre.push('load');if(mode==='resetdebug')pre.push('load','monitor reset');const dc={name:'MPC5777M - '+mode,type:'gdbtarget',request:'attach',program:elf,gdb:p.gdb.replace(/\\/g,'/'),cwd:f.uri.fsPath,target:{type:'remote',host:'127.0.0.1',port:String(cfg().get('serverPort',7224))},gdbAsync:true,gdbNonStop:false,run:'all',updateThreadInfo:cfg().get('updateThreadInfo','when-requested'),preConnectCommands:['set backtrace limit 1'],preRunCommands:pre,verbose:cfg().get('verbose',false)};output.appendLine('[CDT CONFIG] '+JSON.stringify(dc,null,2));output.show(true);if(!await vscode.debug.startDebugging(f,dc))throw new Error('Could not start CDT GDB session. Check the CDT configuration printed above.');}
 function flashImage(f){return rp(f,cfg().get('programImagePath','Bin/Project.elf'));}
 async function runFlashServer(context,type,{runAfter=false}={}){
