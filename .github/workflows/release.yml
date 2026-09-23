@@ -23,6 +23,8 @@ env:
 jobs:
   build-release:
     runs-on: ubuntu-latest
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -137,17 +139,6 @@ jobs:
             echo "OK: $f"
           done
 
-      - name: Publish VS Code Marketplace
-        shell: bash
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: |
-          if [ -z "$VSCE_PAT" ]; then
-            echo "::error::Missing GitHub Actions secret VSCE_PAT. Add a Visual Studio Marketplace PAT with Marketplace > Manage permission."
-            exit 1
-          fi
-          vsce publish --packagePath "${{ steps.pkg.outputs.asset }}" -p "$VSCE_PAT"
-
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -166,3 +157,11 @@ jobs:
             - MPC5777M PCP and reset macro
 
             To avoid VSCE stalling on thousands of PEmicro files, the complete PEmicro win32 runtime is stored inside the VSIX as one zip and extracted automatically on first use.
+
+      - name: Publish VS Code Marketplace (optional)
+        if: ${{ env.VSCE_PAT != '' }}
+        shell: bash
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          vsce publish --packagePath "${{ steps.pkg.outputs.asset }}" -p "$VSCE_PAT"
