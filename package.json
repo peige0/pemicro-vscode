@@ -2,7 +2,7 @@
   "name": "mpc5777m-pemicro-debug",
   "displayName": "MPC5777M PEmicro Debug & Flash",
   "description": "MPC5777M debugging and flash programming for VS Code with bundled PowerPC VLE GDB and PEmicro Power GDB Server.",
-  "version": "1.3.8",
+  "version": "1.3.9",
   "publisher": "peige0",
   "license": "UNLICENSED",
   "engines": {
@@ -23,7 +23,7 @@
   ],
   "main": "./extension.js",
   "activationEvents": [
-    "onStartupFinished"
+    "*"
   ],
   "extensionDependencies": [
     "eclipse-cdt.cdt-gdb-vscode"
