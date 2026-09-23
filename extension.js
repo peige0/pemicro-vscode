@@ -48,7 +48,10 @@ async function startServer(context,mode){
   const p=rt(context),c=cfg();need(p.server,'PEmicro GDB Server');
   await killServer();
   const ini=p.externalConfig||(mode==='attach'?p.attach:(mode==='resetdebug'?p.reset:p.download));
-  const args=['-device='+c.get('device','MPC5777M'),'-startserver','-singlesession','-serverport='+c.get('serverPort',7224),'-gdbmiport='+c.get('gdbMiPort',6224),'-interface='+c.get('interface','USBMULTILINK'),'-speed='+c.get('speed',5000),'-port='+c.get('port','USB1'),'-corenum='+c.get('core',0),'-configfile='+ini];
+  const args=['-device='+c.get('device','MPC5777M'),'-startserver','-singlesession','-serverport='+c.get('serverPort',7224),'-gdbmiport='+c.get('gdbMiPort',6224),'-interface='+c.get('interface','USBMULTILINK'),'-speed='+c.get('speed',5000),'-port='+c.get('port','USB1')];
+  const core=Number(c.get('core',0))||0;
+  if(core>0)args.push('-corenum='+core);
+  args.push('-configfile='+ini);
   output.appendLine('[SERVER] '+p.server+' '+args.join(' '));
   output.show(true);
   const child=cp.spawn(p.server,args,{cwd:path.dirname(p.server),windowsHide:false,stdio:['ignore','pipe','pipe']});
@@ -81,7 +84,6 @@ async function runFlashServer(context,type,{runAfter=false}={}){
     '-interface='+c.get('interface','USBMULTILINK'),
     '-speed='+c.get('speed',5000),
     '-port='+c.get('port','USB1'),
-    '-corenum='+c.get('core',0),
     '-configfile='+p.download,
     '-programmingtype='+type,
     type===3?'-flashobjectfile=':'-flashobjectfile='+image,
