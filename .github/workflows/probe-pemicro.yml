@@ -11,22 +11,19 @@ jobs:
   probe:
     runs-on: windows-latest
     steps:
-      - name: Probe update metadata
+      - name: Probe Power update metadata
         shell: pwsh
         run: |
+          $base = "https://www.pemicro.com/eclipse/updates/com.pemicro.debug.gdbjtag.ppc.updatesite"
           $urls = @(
-            "https://www.pemicro.com/eclipse/updates/compositeArtifacts.xml",
-            "https://www.pemicro.com/eclipse/updates/compositeContent.xml",
-            "https://www.pemicro.com/eclipse/updates/artifacts.xml",
-            "https://www.pemicro.com/eclipse/updates/content.xml",
-            "https://www.pemicro.com/eclipse/updates/"
+            "$base/artifacts.xml",
+            "$base/content.xml",
+            "$base/site.xml",
+            "$base/compositeArtifacts.xml",
+            "$base/compositeContent.xml"
           )
           foreach ($u in $urls) {
             Write-Host "===== $u ====="
-            try {
-              & curl.exe -L --fail --max-time 30 $u
-            } catch {
-              Write-Host $_
-            }
+            & curl.exe -L --max-time 30 $u
             Write-Host ""
           }
