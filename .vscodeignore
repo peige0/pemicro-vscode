@@ -1,0 +1,7 @@
+.github/**
+toolchain/**
+scripts/**
+*.vsix
+node_modules/**
+.vscode/**
+**/*.log
